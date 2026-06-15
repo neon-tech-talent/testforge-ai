@@ -27,6 +27,13 @@ export default function NuevoProyectoPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const normalizeUrl = (raw: string): string => {
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -36,10 +43,12 @@ export default function NuevoProyectoPage() {
       return;
     }
 
+    const urlNormalizada = normalizeUrl(form.url_sitio);
+
     try {
-      new URL(form.url_sitio);
+      new URL(urlNormalizada);
     } catch {
-      setError('La URL del sitio no es válida. Incluye https://');
+      setError('La URL del sitio no es válida. Ej: cinemark.com.ar o https://cinemark.com.ar');
       return;
     }
 
@@ -49,7 +58,7 @@ export default function NuevoProyectoPage() {
       const res = await fetch('/api/proyectos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, session_id: sessionId }),
+        body: JSON.stringify({ ...form, url_sitio: urlNormalizada, session_id: sessionId }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Error al crear el proyecto');
@@ -110,16 +119,20 @@ export default function NuevoProyectoPage() {
                 <Globe className="w-3.5 h-3.5 inline mr-1.5 text-neon-cyan" />
                 URL del Sitio Objetivo <span className="text-neon-red">*</span>
               </label>
-              <input
-                type="url"
-                value={form.url_sitio}
-                onChange={(e) => setForm({ ...form, url_sitio: e.target.value })}
-                placeholder="https://mi-sitio.com"
-                className="forge-input"
-                required
-              />
-              <p className="text-xs text-gray-600 mt-1">
-                La URL que la IA va a testear. Debe ser accesible públicamente.
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-600 font-mono select-none pointer-events-none">
+                  {!form.url_sitio || /^https?:\/\//i.test(form.url_sitio) ? '' : 'https://'}
+                </span>
+                <input
+                  type="text"
+                  value={form.url_sitio}
+                  onChange={(e) => setForm({ ...form, url_sitio: e.target.value })}
+                  placeholder="cinemark.com.ar"
+                  className="forge-input"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Podés ingresar con o sin <span className="text-neon-cyan font-mono">https://</span> — se agrega automáticamente.
               </p>
             </div>
 
@@ -131,10 +144,10 @@ export default function NuevoProyectoPage() {
                 <span className="text-gray-600 font-normal">(opcional)</span>
               </label>
               <input
-                type="url"
+                type="text"
                 value={form.repo_github}
                 onChange={(e) => setForm({ ...form, repo_github: e.target.value })}
-                placeholder="https://github.com/usuario/repo"
+                placeholder="github.com/usuario/repo"
                 className="forge-input"
               />
             </div>
