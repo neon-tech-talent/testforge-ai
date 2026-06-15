@@ -123,7 +123,6 @@ export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorP
             estadoGeneral={ejecucion.estado}
             onSkip={handleSkipModule}
             skipping={skipping}
-            progresoModulos={ejecucion.configuracion_json?.progreso_modulos}
           />
         </div>
 
