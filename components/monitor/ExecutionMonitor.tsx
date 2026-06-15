@@ -15,6 +15,7 @@ interface ExecutionMonitorProps {
 export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorProps) {
   const [ejecucion, setEjecucion] = useState<EjecucionTest | null>(null);
   const [loading, setLoading] = useState(true);
+  const [skipping, setSkipping] = useState(false);
 
   const fetchEjecucion = useCallback(async () => {
     const res = await fetch(`/api/ejecuciones/${ejecucionId}`);
@@ -22,6 +23,26 @@ export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorP
     if (json.data) setEjecucion(json.data);
     setLoading(false);
   }, [ejecucionId]);
+
+  const handleSkipModule = async () => {
+    if (skipping) return;
+    setSkipping(true);
+    try {
+      const res = await fetch(`/api/ejecuciones/${ejecucionId}/saltar`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const errJson = await res.json();
+        console.error("Error al interrumpir módulo:", errJson.error);
+      } else {
+        await fetchEjecucion();
+      }
+    } catch (err) {
+      console.error("Error de red al interrumpir módulo:", err);
+    } finally {
+      setSkipping(false);
+    }
+  };
 
   useEffect(() => {
     fetchEjecucion();
@@ -100,6 +121,8 @@ export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorP
             modulosActivos={ejecucion.modulos_activos as TipoPrueba[]}
             progreso={ejecucion.progreso}
             estadoGeneral={ejecucion.estado}
+            onSkip={handleSkipModule}
+            skipping={skipping}
           />
         </div>
 
