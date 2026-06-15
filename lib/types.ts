@@ -100,6 +100,12 @@ export interface ConfiguracionEjecucion {
   flujos_detectados?: string[];
   // General
   url_objetivo?: string;
+
+  // Control de ejecución y progreso
+  modulo_actual?: string | null;
+  skip_requested?: boolean;
+  modulos_saltados?: string[];
+  progreso_modulos?: Record<string, number>;
 }
 
 export interface LogConsola {
