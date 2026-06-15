@@ -51,11 +51,14 @@ function ModuleCard({ modulo, activo, onToggle }: { modulo: ModuloConfig; activo
             )}
           </div>
         </div>
-        <Toggle
-          checked={activo}
-          onChange={() => onToggle(modulo.id)}
-          id={`toggle-${modulo.id}`}
-        />
+        {/* stopPropagation evita que el click del Toggle dispare tambien el onClick del div padre */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <Toggle
+            checked={activo}
+            onChange={() => onToggle(modulo.id)}
+            id={`toggle-${modulo.id}`}
+          />
+        </div>
       </div>
       <p className="text-xs text-gray-500 leading-relaxed">{modulo.descripcion}</p>
     </div>
