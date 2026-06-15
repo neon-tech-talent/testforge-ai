@@ -12,6 +12,7 @@ interface ProgressTrackerProps {
   estadoGeneral: string;
   onSkip?: () => void;
   skipping?: boolean;
+  progresoModulos?: Record<string, number>;
 }
 
 function getEstadoModulo(modulo: TipoPrueba, progreso: number, modulosActivos: TipoPrueba[], estadoGeneral: string): EstadoModulo {
@@ -50,7 +51,14 @@ const estadoColor: Record<EstadoModulo, string> = {
   fallido: 'text-neon-red',
 };
 
-export function ProgressTracker({ modulosActivos, progreso, estadoGeneral, onSkip, skipping = false }: ProgressTrackerProps) {
+export function ProgressTracker({
+  modulosActivos,
+  progreso,
+  estadoGeneral,
+  onSkip,
+  skipping = false,
+  progresoModulos = {},
+}: ProgressTrackerProps) {
   const modulosConfig = MODULOS.filter((m) => modulosActivos.includes(m.id));
 
   return (
@@ -72,6 +80,16 @@ export function ProgressTracker({ modulosActivos, progreso, estadoGeneral, onSki
       {/* Módulos individuales */}
       {modulosConfig.map((modulo) => {
         const estado = getEstadoModulo(modulo.id, progreso, modulosActivos, estadoGeneral);
+        
+        let porcentaje = 0;
+        if (estado === 'completado') {
+          porcentaje = 100;
+        } else if (estado === 'pendiente') {
+          porcentaje = 0;
+        } else if (estado === 'en_progreso') {
+          porcentaje = progresoModulos[modulo.id] || 0;
+        }
+
         return (
           <div
             key={modulo.id}
@@ -83,20 +101,28 @@ export function ProgressTracker({ modulosActivos, progreso, estadoGeneral, onSki
               'border-forge-border bg-forge-surface/50'
             )}
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-lg">{modulo.icono}</span>
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <span className="text-lg flex-shrink-0">{modulo.icono}</span>
               <div className="flex-1 min-w-0">
                 <p className={clsx('text-sm font-medium truncate', estado === 'pendiente' ? 'text-gray-400' : 'text-gray-200')}>
                   {modulo.nombre}
                 </p>
+                {estado === 'en_progreso' && (
+                  <div className="mt-1.5 w-28 bg-gray-800 rounded-full h-1 overflow-hidden">
+                    <div
+                      className="bg-neon-cyan h-full transition-all duration-300"
+                      style={{ width: `${porcentaje}%` }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
             
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 {estadoIcon[estado]}
-                <span className={clsx('text-xs font-semibold mr-1', estadoColor[estado])}>
-                  {estadoLabel[estado]}
+                <span className={clsx('text-xs font-semibold mr-1 whitespace-nowrap', estadoColor[estado])}>
+                  {estado === 'en_progreso' ? `Ejecutando... ${porcentaje}%` : estadoLabel[estado]}
                 </span>
               </div>
               {estado === 'en_progreso' && estadoGeneral === 'en_progreso' && onSkip && (

@@ -67,7 +67,8 @@ async function ejecutarSimulacion(
         configuracion_json: {
           ...initialConfig,
           modulo_actual: modulos[0] || null,
-          modulos_saltados: []
+          modulos_saltados: [],
+          progreso_modulos: {}
         }
       })
       .eq("id", ejecucionId);
@@ -93,13 +94,19 @@ async function ejecutarSimulacion(
         continue;
       }
 
+      const nuevosProgresoModulos = {
+        ...(configObj.progreso_modulos || {}),
+        [modulo]: 0
+      };
+
       // Actualizar el modulo_actual en la DB
       await supabase
         .from("ejecuciones_test")
         .update({
           configuracion_json: {
             ...configObj,
-            modulo_actual: modulo
+            modulo_actual: modulo,
+            progreso_modulos: nuevosProgresoModulos
           }
         })
         .eq("id", ejecucionId);
@@ -121,13 +128,38 @@ async function ejecutarSimulacion(
         })
         .eq("id", ejecucionId);
 
-      // Delay realista por módulo, chequeando interrupción cada 250ms
+      // Delay realista por módulo, chequeando interrupción y actualizando porcentaje cada 500ms
       const delayTime = 2000 + Math.random() * 2000;
-      const step = 250;
+      const step = 500;
       let elapsed = 0;
       let interrupted = false;
 
       while (elapsed < delayTime) {
+        // Calcular porcentaje del módulo actual
+        const porcentajeModulo = Math.min(95, Math.floor((elapsed / delayTime) * 100));
+
+        // Consultar configuración actual para no sobreescribir otros valores
+        const { data: stepExec } = await supabase
+          .from("ejecuciones_test")
+          .select("configuracion_json")
+          .eq("id", ejecucionId)
+          .single();
+
+        const stepConfig = (stepExec?.configuracion_json || {}) as Record<string, any>;
+        
+        await supabase
+          .from("ejecuciones_test")
+          .update({
+            configuracion_json: {
+              ...stepConfig,
+              progreso_modulos: {
+                ...(stepConfig.progreso_modulos || {}),
+                [modulo]: porcentajeModulo
+              }
+            }
+          })
+          .eq("id", ejecucionId);
+
         await delay(step);
         elapsed += step;
 
@@ -208,10 +240,26 @@ async function ejecutarSimulacion(
       } else {
         // Si no se interrumpió, completar el log final del módulo
         logsAcumulados.push(...logFin);
+
+        const { data: stepExec } = await supabase
+          .from("ejecuciones_test")
+          .select("configuracion_json")
+          .eq("id", ejecucionId)
+          .single();
+
+        const stepConfig = (stepExec?.configuracion_json || {}) as Record<string, any>;
+
         await supabase
           .from("ejecuciones_test")
           .update({
             logs_consola: logsAcumulados,
+            configuracion_json: {
+              ...stepConfig,
+              progreso_modulos: {
+                ...(stepConfig.progreso_modulos || {}),
+                [modulo]: 100
+              }
+            }
           })
           .eq("id", ejecucionId);
       }
@@ -227,13 +275,18 @@ async function ejecutarSimulacion(
     const finalConfig = (finalExec?.configuracion_json || {}) as Record<string, any>;
     const finalSaltados: string[] = finalConfig.modulos_saltados || [];
 
+    const finalProgresoModulos = { ...(finalConfig.progreso_modulos || {}) };
+    const modulosFiltrados = modulos.filter(m => !finalSaltados.includes(m));
+    modulosFiltrados.forEach(m => {
+      finalProgresoModulos[m] = 100;
+    });
+
     const cleanedConfig = {
       ...finalConfig,
       modulo_actual: null,
-      skip_requested: false
+      skip_requested: false,
+      progreso_modulos: finalProgresoModulos
     };
-
-    const modulosFiltrados = modulos.filter(m => !finalSaltados.includes(m));
 
     // 4. Generar y guardar resultados de los módulos no saltados
     await supabase
