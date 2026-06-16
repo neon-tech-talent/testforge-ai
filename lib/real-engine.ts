@@ -674,6 +674,9 @@ export async function ejecutarEstres(
           throughput: `${throughput.toFixed(1)} req/s`
         }
       });
+    }
+
+  } catch (err: any) {
     addLog("error", `🔥 [Estrés] Error crítico en simulación de carga: ${err.message}`);
   }
 
