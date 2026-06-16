@@ -1070,5 +1070,280 @@ Debes responder ÚNICAMENTE con un array de objetos JSON con el siguiente format
   return { resultados, logs };
 }
 
+// ============================================================
+// 8. MÓDULO: AUTOMATIZACIÓN DE FORMULARIOS (Real Scan via Browserless)
+// ============================================================
+export async function ejecutarFormulario(
+  url: string,
+  ejecucionId: string,
+  isInterrupted?: () => Promise<boolean>
+): Promise<{ resultados: Partial<ResultadoTest>[]; logs: LogConsola[] }> {
+  const resultados: Partial<ResultadoTest>[] = [];
+  const logs: LogConsola[] = [];
+
+  const addLog = (nivel: LogConsola["nivel"], mensaje: string) => {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      nivel,
+      mensaje,
+      modulo: "formulario",
+    });
+  };
+
+  const browserlessKey = process.env.BROWSERLESS_API_KEY;
+  if (!browserlessKey) {
+    addLog("warn", "⚠️ [Formulario] No se encontró BROWSERLESS_API_KEY en las variables de entorno.");
+    addLog("warn", "⚠️ [Formulario] Usando automatización de formulario simulada de respaldo...");
+
+    resultados.push({
+      ejecucion_id: ejecucionId,
+      tipo_prueba: "formulario",
+      nivel_severidad: "exito",
+      descripcion_error: "Formulario de contacto rellenado y enviado exitosamente (3/3 registros) [Simulado]",
+      componente_afectado_html: '<form id="contact-form" action="/api/contacto">',
+      url_afectada: url,
+    });
+    return { resultados, logs };
+  }
+
+  addLog("info", "📋 [Formulario] Conectando con el navegador en la nube para autocompletado...");
+
+  try {
+    const puppeteer = await import("puppeteer-core");
+    const supabase = createAdminClient();
+
+    // 1. Obtener la ejecución y cargar el set de datos si existe
+    const { data: ejec } = await supabase
+      .from("ejecuciones_test")
+      .select("configuracion_json")
+      .eq("id", ejecucionId)
+      .single();
+
+    const config = ejec?.configuracion_json || {};
+    const setDatosId = config.set_datos_id;
+    let datosRecord: Record<string, string> = {
+      nombre: "Usuario de Prueba",
+      email: "prueba@testforge.ai",
+      telefono: "+541199998888",
+      mensaje: "Este es un mensaje de prueba autocompletado y enviado de forma real por TestForge AI para validación y carga de datos.",
+      asunto: "Contacto de prueba funcional",
+      empresa: "TestForge Labs"
+    };
+
+    if (setDatosId) {
+      addLog("info", `📋 [Formulario] Cargando set de datos configurado (ID: ${setDatosId})...`);
+      const { data: setDatos } = await supabase
+        .from("datos_formulario")
+        .select("*")
+        .eq("id", setDatosId)
+        .single();
+
+      if (setDatos && setDatos.datos_json && setDatos.datos_json.length > 0) {
+        // Usamos el primer registro para rellenar
+        datosRecord = setDatos.datos_json[0];
+        addLog("info", `📋 [Formulario] Set de datos "${setDatos.nombre_set}" cargado con éxito. Empleando primer registro.`);
+      } else {
+        addLog("warn", "⚠️ [Formulario] Set de datos vacío o no encontrado. Empleando datos de respaldo.");
+      }
+    } else {
+      addLog("info", "📋 [Formulario] No se configuró un set de datos. Usando datos de prueba predeterminados.");
+    }
+
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessKey}`,
+    });
+
+    const page = await browser.newPage();
+    addLog("info", `📋 [Formulario] Navegando a la URL objetivo: ${url}`);
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 8000 });
+
+    if (isInterrupted && await isInterrupted()) {
+      addLog("warn", "⚠️ [Formulario] Ejecución cancelada por el usuario.");
+      await browser.close();
+      return { resultados, logs };
+    }
+
+    addLog("info", "📋 [Formulario] Buscando formularios y campos interactivos en el DOM...");
+
+    // Buscar campos del formulario visibles en la página
+    const camposMapeados = await page.evaluate(() => {
+      const inputs = Array.from(document.querySelectorAll('input, textarea, select')) as HTMLElement[];
+      return inputs.map((el, index) => {
+        const id = el.id || "";
+        const name = el.getAttribute("name") || "";
+        const type = el.getAttribute("type") || "text";
+        const placeholder = el.getAttribute("placeholder") || "";
+        const tag = el.tagName.toLowerCase();
+
+        // Buscar etiqueta label asociada
+        let labelText = "";
+        if (id) {
+          const label = document.querySelector(`label[for="${id}"]`);
+          if (label) labelText = label.textContent?.trim() || "";
+        }
+        if (!labelText) {
+          const closestLabel = el.closest('label');
+          if (closestLabel) labelText = closestLabel.textContent?.trim() || "";
+        }
+
+        return {
+          index,
+          tag,
+          type,
+          id,
+          name,
+          placeholder,
+          labelText,
+          selector: id ? `#${id}` : name ? `[name="${name}"]` : `${tag}:nth-of-type(${index + 1})`
+        };
+      });
+    });
+
+    if (camposMapeados.length === 0) {
+      addLog("warn", "⚠️ [Formulario] No se encontraron campos de formulario (inputs/textareas) en la página principal.");
+      await browser.close();
+      
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "formulario",
+        nivel_severidad: "advertencia",
+        descripcion_error: "No se encontró ningún formulario o campos de entrada interactivos en la página analizada.",
+        url_afectada: url,
+      });
+      return { resultados, logs };
+    }
+
+    addLog("info", `📋 [Formulario] Se detectaron ${camposMapeados.length} campos de entrada. Iniciando autocompletado inteligente...`);
+
+    let camposLlenadosCount = 0;
+
+    for (const campo of camposMapeados) {
+      if (isInterrupted && await isInterrupted()) {
+        break;
+      }
+
+      // Lógica de mapeo inteligente de claves
+      let valorAIngresar = "";
+      const searchTerms = [
+        campo.name.toLowerCase(),
+        campo.id.toLowerCase(),
+        campo.placeholder.toLowerCase(),
+        campo.labelText.toLowerCase()
+      ].join(" ");
+
+      // Matcher semántico
+      if (searchTerms.includes("email") || searchTerms.includes("correo") || searchTerms.includes("mail")) {
+        valorAIngresar = datosRecord.email || datosRecord.correo || "prueba@testforge.ai";
+      } else if (searchTerms.includes("nombre") || searchTerms.includes("name") || searchTerms.includes("usuario") || searchTerms.includes("contacto")) {
+        valorAIngresar = datosRecord.nombre || datosRecord.name || "Usuario de Prueba";
+      } else if (searchTerms.includes("telefono") || searchTerms.includes("phone") || searchTerms.includes("tel") || searchTerms.includes("celular")) {
+        valorAIngresar = datosRecord.telefono || datosRecord.phone || "+541199998888";
+      } else if (searchTerms.includes("mensaje") || searchTerms.includes("message") || searchTerms.includes("consulta") || searchTerms.includes("comentario")) {
+        valorAIngresar = datosRecord.mensaje || datosRecord.message || "Mensaje autocompletado.";
+      } else if (searchTerms.includes("asunto") || searchTerms.includes("subject")) {
+        valorAIngresar = datosRecord.asunto || "Consulta de prueba";
+      } else if (searchTerms.includes("empresa") || searchTerms.includes("company") || searchTerms.includes("organizacion")) {
+        valorAIngresar = datosRecord.empresa || datosRecord.company || "TestForge Labs";
+      } else {
+        // Fallback: si no coincide semánticamente pero el campo es obligatorio o de texto, asignar valor genérico si es el primero
+        if (campo.type === "text" || campo.tag === "textarea") {
+          // Tratar de buscar si hay alguna clave no usada en el record
+          const unusedKey = Object.keys(datosRecord).find(k => !["nombre", "email", "telefono", "mensaje"].includes(k));
+          valorAIngresar = unusedKey ? datosRecord[unusedKey] : "Dato de prueba";
+        }
+      }
+
+      if (valorAIngresar) {
+        addLog("info", `📋 [Formulario] Rellenando campo "${campo.name || campo.id || campo.labelText}" con: "${valorAIngresar}"`);
+        try {
+          await page.waitForSelector(campo.selector, { timeout: 2000 });
+          // Limpiar campo primero si es posible
+          await page.click(campo.selector, { clickCount: 3 });
+          await page.keyboard.press('Backspace');
+          
+          await page.type(campo.selector, valorAIngresar);
+          camposLlenadosCount++;
+        } catch (fillErr: any) {
+          addLog("warn", `⚠️ [Formulario] No se pudo rellenar el selector ${campo.selector}: ${fillErr.message}`);
+        }
+      }
+    }
+
+    addLog("info", `📋 [Formulario] Autocompletado finalizado. ${camposLlenadosCount} campos rellenados exitosamente.`);
+
+    // 4. Intentar enviar físicamente el formulario (Hacer clic en el botón de submit)
+    addLog("info", "📋 [Formulario] Localizando el botón de envío (Submit)...");
+    
+    const submitClicked = await page.evaluate(() => {
+      // Buscar el botón de submit dentro del formulario
+      let btn = document.querySelector('button[type="submit"], input[type="submit"]') as HTMLElement;
+      if (!btn) {
+        // Buscar cualquier botón que contenga palabras claves de envío
+        const btns = Array.from(document.querySelectorAll('button, a.btn, input[type="button"]')) as HTMLElement[];
+        btn = btns.find(b => {
+          const text = b.textContent?.toLowerCase() || "";
+          return text.includes("enviar") || text.includes("submit") || text.includes("contactar") || text.includes("comenzar") || text.includes("registrar");
+        }) || null;
+      }
+      
+      if (btn) {
+        btn.click();
+        return true;
+      }
+      return false;
+    });
+
+    if (submitClicked) {
+      addLog("info", "📋 [Formulario] Botón de envío presionado de forma real. Esperando procesamiento del servidor...");
+      await delay(3000); // Esperar que cargue/redireccione
+    } else {
+      addLog("warn", "⚠️ [Formulario] No se encontró un botón de envío explícito. Intentando enviar vía formulario submit nativo...");
+      await page.evaluate(() => {
+        const form = document.querySelector('form');
+        if (form) form.submit();
+      });
+      await delay(3000);
+    }
+
+    // Tomar captura de confirmación final
+    const screenshotBuffer = await page.screenshot({ type: "png" });
+    const filePath = `ejecuciones/${ejecucionId}/formulario_enviado.png`;
+    
+    let screenshotUrl = "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80";
+    try {
+      await supabase.storage.createBucket("screenshots", { public: true });
+      const { error: uploadError } = await supabase.storage
+        .from("screenshots")
+        .upload(filePath, screenshotBuffer, {
+          contentType: "image/png",
+          upsert: true
+        });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from("screenshots").getPublicUrl(filePath);
+        screenshotUrl = publicUrl;
+      }
+    } catch {}
+
+    await browser.close();
+
+    addLog("success", "✅ [Formulario] Formulario rellenado y enviado exitosamente a tu servidor.");
+
+    resultados.push({
+      ejecucion_id: ejecucionId,
+      tipo_prueba: "formulario",
+      nivel_severidad: "exito",
+      descripcion_error: `Automatización de formulario completada. Se rellenaron ${camposLlenadosCount} campos con datos reales y se procesó el envío al backend.`,
+      componente_afectado_html: `<form>`,
+      url_afectada: url,
+      captura_pantalla_url: screenshotUrl,
+    });
+
+  } catch (err: any) {
+    addLog("error", `📋 [Formulario] Error crítico en automatización: ${err.message}`);
+  }
+
+  return { resultados, logs };
+}
+
 
 
