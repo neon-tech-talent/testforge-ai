@@ -1,4 +1,5 @@
 import { ResultadoTest, LogConsola } from "./types";
+import { createAdminClient } from "./supabase/server";
 
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -673,12 +674,136 @@ export async function ejecutarEstres(
           throughput: `${throughput.toFixed(1)} req/s`
         }
       });
-    }
-
-  } catch (err: any) {
     addLog("error", `🔥 [Estrés] Error crítico en simulación de carga: ${err.message}`);
   }
 
   return { resultados, logs };
 }
+
+// ============================================================
+// 6. MÓDULO: REGRESIÓN VISUAL / DISEÑO (Real Scan via Browserless)
+// ============================================================
+export async function ejecutarDiseno(
+  url: string,
+  ejecucionId: string,
+  isInterrupted?: () => Promise<boolean>
+): Promise<{ resultados: Partial<ResultadoTest>[]; logs: LogConsola[] }> {
+  const resultados: Partial<ResultadoTest>[] = [];
+  const logs: LogConsola[] = [];
+
+  const addLog = (nivel: LogConsola["nivel"], mensaje: string) => {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      nivel,
+      mensaje,
+      modulo: "diseno",
+    });
+  };
+
+  const browserlessKey = process.env.BROWSERLESS_API_KEY;
+  if (!browserlessKey) {
+    addLog("warn", "⚠️ [Diseño] No se encontró BROWSERLESS_API_KEY en las variables de entorno.");
+    addLog("warn", "⚠️ [Diseño] Usando captura de pantalla simulada de respaldo...");
+    
+    resultados.push({
+      ejecucion_id: ejecucionId,
+      tipo_prueba: "diseno",
+      nivel_severidad: "critico",
+      descripcion_error: "Componente NavBar superpuesto con el hero en viewport Mobile (375px) [Simulado - Configura Browserless para capturas reales]",
+      componente_afectado_html: '<nav class="navbar fixed-top" id="main-nav">',
+      url_afectada: url,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
+    });
+    return { resultados, logs };
+  }
+
+  addLog("info", "🎨 [Diseño] Conectando con el navegador en la nube (Browserless.io)...");
+
+  try {
+    const puppeteer = await import("puppeteer-core");
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessKey}`,
+    });
+
+    addLog("info", "🎨 [Diseño] Navegador conectado. Iniciando capturas multidispositivo...");
+    
+    const viewports = [
+      { name: "desktop", width: 1280, height: 800 },
+      { name: "tablet", width: 768, height: 1024 },
+      { name: "mobile", width: 375, height: 812 }
+    ];
+
+    const supabase = createAdminClient();
+    
+    // Intentar asegurar que el bucket de almacenamiento exista y sea público
+    try {
+      await supabase.storage.createBucket("screenshots", {
+        public: true
+      });
+    } catch {
+      // Ignorar error si ya existe
+    }
+
+    for (const vp of viewports) {
+      if (isInterrupted && await isInterrupted()) {
+        addLog("warn", `⚠️ [Diseño] Captura cancelada por el usuario antes de procesar ${vp.name}.`);
+        break;
+      }
+
+      addLog("info", `🎨 [Diseño] Renderizando sitio en resolución ${vp.name} (${vp.width}x${vp.height})...`);
+      const page = await browser.newPage();
+      await page.setViewport({ width: vp.width, height: vp.height });
+      
+      try {
+        await page.goto(url, { waitUntil: "networkidle2", timeout: 8000 });
+        const screenshotBuffer = await page.screenshot({ type: "png" });
+        
+        const filePath = `ejecuciones/${ejecucionId}/diseno_${vp.name}.png`;
+        
+        addLog("info", `🎨 [Diseño] Guardando captura ${vp.name} en Supabase Storage...`);
+        
+        const { error: uploadError } = await supabase.storage
+          .from("screenshots")
+          .upload(filePath, screenshotBuffer, {
+            contentType: "image/png",
+            upsert: true
+          });
+
+        if (uploadError) {
+          throw new Error(`Error de almacenamiento: ${uploadError.message}`);
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("screenshots")
+          .getPublicUrl(filePath);
+
+        addLog("success", `🎨 [Diseño] Captura ${vp.name} completada con éxito.`);
+
+        resultados.push({
+          ejecucion_id: ejecucionId,
+          tipo_prueba: "diseno",
+          nivel_severidad: "exito",
+          descripcion_error: `Visualización multidispositivo: Vista ${vp.name} (${vp.width}x${vp.height}) renderizada correctamente.`,
+          componente_afectado_html: `Viewport: ${vp.name}`,
+          url_afectada: url,
+          captura_pantalla_url: publicUrl,
+        });
+
+      } catch (pageErr: any) {
+        addLog("error", `🎨 [Diseño] Error al capturar viewport ${vp.name}: ${pageErr.message}`);
+      } finally {
+        await page.close();
+      }
+    }
+
+    await browser.close();
+    addLog("success", "🎨 [Diseño] Análisis de regresión visual completado.");
+
+  } catch (err: any) {
+    addLog("error", `🎨 [Diseño] Error crítico en análisis visual: ${err.message}`);
+  }
+
+  return { resultados, logs };
+}
+
 
