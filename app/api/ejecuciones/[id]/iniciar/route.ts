@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { generarLogs, generarResultadosMock, delay } from "@/lib/mock-engine";
-import { ejecutarLinksRotos, ejecutarAccesibilidad, ejecutarOrtografia } from "@/lib/real-engine";
+import { ejecutarLinksRotos, ejecutarAccesibilidad, ejecutarOrtografia, ejecutarSeguridad } from "@/lib/real-engine";
 import { NextRequest, NextResponse } from "next/server";
 
 // POST /api/ejecuciones/[id]/iniciar
@@ -102,7 +102,7 @@ async function ejecutarSimulacion(
         })
         .eq("id", ejecucionId);
 
-      const isRealModule = ["links_rotos", "accesibilidad", "ortografia"].includes(modulo);
+      const isRealModule = ["links_rotos", "accesibilidad", "ortografia", "seguridad"].includes(modulo);
 
       if (isRealModule) {
         // Ejecución Real
@@ -121,8 +121,10 @@ async function ejecutarSimulacion(
           resReal = await ejecutarLinksRotos(url, ejecucionId, isInterruptedCb);
         } else if (modulo === "accesibilidad") {
           resReal = await ejecutarAccesibilidad(url, ejecucionId, isInterruptedCb);
-        } else {
+        } else if (modulo === "ortografia") {
           resReal = await ejecutarOrtografia(url, ejecucionId, isInterruptedCb);
+        } else {
+          resReal = await ejecutarSeguridad(url, ejecucionId, isInterruptedCb);
         }
 
         // Obtener configuración más reciente para ver si fue interrumpido
@@ -353,7 +355,7 @@ async function ejecutarSimulacion(
       .eq("id", ejecucionId);
 
     // Filtrar los módulos que ya ejecutaron pruebas reales para que no se generen mocks duplicados
-    const modulosParaMock = modulosFiltrados.filter(m => !["links_rotos", "accesibilidad", "ortografia"].includes(m));
+    const modulosParaMock = modulosFiltrados.filter(m => !["links_rotos", "accesibilidad", "ortografia", "seguridad"].includes(m));
     const resultados = await generarResultadosMock(ejecucionId, modulosParaMock, url);
 
     if (resultados.length > 0) {

@@ -351,3 +351,196 @@ export async function ejecutarOrtografia(
 
   return { resultados, logs };
 }
+
+// ============================================================
+// 4. MÓDULO: SEGURIDAD (Real Scan)
+// ============================================================
+export async function ejecutarSeguridad(
+  url: string,
+  ejecucionId: string,
+  isInterrupted?: () => Promise<boolean>
+): Promise<{ resultados: Partial<ResultadoTest>[]; logs: LogConsola[] }> {
+  const resultados: Partial<ResultadoTest>[] = [];
+  const logs: LogConsola[] = [];
+
+  const addLog = (nivel: LogConsola["nivel"], mensaje: string) => {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      nivel,
+      mensaje,
+      modulo: "seguridad",
+    });
+  };
+
+  addLog("info", "🛡️ [Seguridad] Iniciando escaneo pasivo de cabeceras HTTP...");
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      }
+    });
+
+    if (isInterrupted && await isInterrupted()) {
+      addLog("warn", "⚠️ [Seguridad] Ejecución interrumpida por el usuario.");
+      return { resultados, logs };
+    }
+
+    addLog("info", "🛡️ [Seguridad] Analizando cabeceras de seguridad...");
+
+    const headers = res.headers;
+
+    // 1. Content-Security-Policy
+    const csp = headers.get("content-security-policy");
+    if (!csp) {
+      addLog("error", "🛡️ [Seguridad] Cabecera 'Content-Security-Policy' ausente.");
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "seguridad",
+        nivel_severidad: "critico",
+        descripcion_error: "La cabecera 'Content-Security-Policy' (CSP) no está configurada. Esto expone el sitio a ataques de inyección de scripts (XSS).",
+        componente_afectado_html: "HTTP Response Headers",
+        url_afectada: url,
+        codigo_solucion_sugerido: `// Configurar CSP en Next.js (next.config.js):
+const securityHeaders = [
+  {
+    key: 'Content-Security-Policy',
+    value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;"
+  }
+];`,
+        lenguaje_codigo: "javascript"
+      });
+    } else {
+      addLog("success", "🛡️ [Seguridad] Cabecera 'Content-Security-Policy' detectada.");
+    }
+
+    // 2. X-Frame-Options
+    const xfo = headers.get("x-frame-options");
+    if (!xfo) {
+      addLog("error", "🛡️ [Seguridad] Cabecera 'X-Frame-Options' ausente.");
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "seguridad",
+        nivel_severidad: "critico",
+        descripcion_error: "La cabecera 'X-Frame-Options' no está configurada, permitiendo que el sitio sea embebido en frames externos (riesgo de Clickjacking).",
+        componente_afectado_html: "HTTP Response Headers",
+        url_afectada: url,
+        codigo_solucion_sugerido: `// Configurar SAMEORIGIN en Next.js (next.config.js):
+const securityHeaders = [
+  {
+    key: 'X-Frame-Options',
+    value: 'SAMEORIGIN'
+  }
+];`,
+        lenguaje_codigo: "javascript"
+      });
+    } else {
+      addLog("success", `🛡️ [Seguridad] Cabecera 'X-Frame-Options' configurada como: ${xfo}`);
+    }
+
+    // 3. X-Content-Type-Options
+    const xcto = headers.get("x-content-type-options");
+    if (!xcto || xcto.toLowerCase() !== "nosniff") {
+      addLog("warn", "🛡️ [Seguridad] Cabecera 'X-Content-Type-Options' ausente o incorrecta.");
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "seguridad",
+        nivel_severidad: "advertencia",
+        descripcion_error: "La cabecera 'X-Content-Type-Options' no está configurada con 'nosniff'. El navegador podría intentar interpretar el tipo de archivo incorrectamente.",
+        componente_afectado_html: "HTTP Response Headers",
+        url_afectada: url,
+        codigo_solucion_sugerido: `// Configurar nosniff en Next.js (next.config.js):
+const securityHeaders = [
+  {
+    key: 'X-Content-Type-Options',
+    value: 'nosniff'
+  }
+];`,
+        lenguaje_codigo: "javascript"
+      });
+    } else {
+      addLog("success", "🛡️ [Seguridad] Cabecera 'X-Content-Type-Options' configurada con 'nosniff'.");
+    }
+
+    // 4. Strict-Transport-Security (HSTS)
+    const hsts = headers.get("strict-transport-security");
+    if (!hsts) {
+      addLog("warn", "🛡️ [Seguridad] Cabecera 'Strict-Transport-Security' (HSTS) ausente.");
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "seguridad",
+        nivel_severidad: "advertencia",
+        descripcion_error: "La cabecera 'Strict-Transport-Security' (HSTS) no está configurada. Las conexiones del usuario podrían ser interceptadas o degradadas a HTTP.",
+        componente_afectado_html: "HTTP Response Headers",
+        url_afectada: url,
+        codigo_solucion_sugerido: `// Configurar HSTS en Next.js (next.config.js):
+const securityHeaders = [
+  {
+    key: 'Strict-Transport-Security',
+    value: 'max-age=63072000; includeSubDomains; preload'
+  }
+];`,
+        lenguaje_codigo: "javascript"
+      });
+    } else {
+      addLog("success", "🛡️ [Seguridad] Cabecera 'Strict-Transport-Security' detectada.");
+    }
+
+    // 5. Cookies seguras
+    let setCookies: string[] = [];
+    if (res.headers.getSetCookie) {
+      setCookies = res.headers.getSetCookie();
+    } else {
+      const rawCookie = res.headers.get("set-cookie");
+      if (rawCookie) {
+        setCookies = [rawCookie];
+      }
+    }
+
+    let cookieProblems = 0;
+    
+    for (const cookie of setCookies) {
+      const parts = cookie.split(";").map(p => p.trim().toLowerCase());
+      const hasSecure = parts.includes("secure");
+      const hasHttpOnly = parts.includes("httponly");
+
+      if (!hasSecure || !hasHttpOnly) {
+        cookieProblems++;
+        const cookieName = cookie.split("=")[0] || "cookie";
+        const missing = [];
+        if (!hasSecure) missing.push("Secure");
+        if (!hasHttpOnly) missing.push("HttpOnly");
+
+        addLog("error", `🛡️ [Seguridad] Cookie de respuesta "${cookieName}" sin directiva: ${missing.join(", ")}`);
+        
+        resultados.push({
+          ejecucion_id: ejecucionId,
+          tipo_prueba: "seguridad",
+          nivel_severidad: "critico",
+          descripcion_error: `La cookie "${cookieName}" no tiene configuradas las banderas de seguridad obligatorias: ${missing.join(" y ")}. Esto facilita ataques de robo de sesión.`,
+          componente_afectado_html: `Set-Cookie: ${cookie.split(";")[0]}`,
+          url_afectada: url,
+          codigo_solucion_sugerido: `// Ejemplo de configuración de cookies seguras:
+response.cookies.set('${cookieName}', valor, {
+  secure: true,
+  httpOnly: true,
+  sameSite: 'strict',
+  path: '/'
+});`,
+          lenguaje_codigo: "javascript"
+        });
+      }
+    }
+
+    if (cookieProblems === 0) {
+      addLog("success", "🛡️ [Seguridad] Análisis de cookies completado sin problemas detectados.");
+    }
+
+    addLog("success", `🛡️ [Seguridad] Escaneo de seguridad completado. Se detectaron ${resultados.length} vulnerabilidades.`);
+  } catch (err: any) {
+    addLog("error", `🛡️ [Seguridad] Error crítico en análisis: ${err.message}`);
+  }
+
+  return { resultados, logs };
+}
