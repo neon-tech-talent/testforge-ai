@@ -18,11 +18,22 @@ export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorP
   const [skipping, setSkipping] = useState(false);
 
   const fetchEjecucion = useCallback(async () => {
-    const res = await fetch(`/api/ejecuciones/${ejecucionId}`);
-    const json = await res.json();
-    if (json.data) setEjecucion(json.data);
-    setLoading(false);
-  }, [ejecucionId]);
+    try {
+      const res = await fetch(`/api/ejecuciones/${ejecucionId}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.data) {
+        setEjecucion(json.data);
+        if (json.data.estado === 'completado' || json.data.estado === 'fallido') {
+          onCompleted?.(ejecucionId);
+        }
+      }
+    } catch (err) {
+      console.error("Error al obtener ejecución:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [ejecucionId, onCompleted]);
 
   const handleSkipModule = async () => {
     if (skipping) return;
@@ -54,6 +65,18 @@ export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorP
       fetch(`/api/ejecuciones/${ejecucionId}/iniciar`, { method: 'POST' }).catch(console.error);
     }
   }, [ejecucion, ejecucionId]);
+
+  useEffect(() => {
+    if (!ejecucion || ejecucion.estado === 'completado' || ejecucion.estado === 'fallido') {
+      return;
+    }
+
+    const pollInterval = setInterval(() => {
+      fetchEjecucion();
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [fetchEjecucion, ejecucion]);
 
   useEffect(() => {
     const supabase = createClient();
