@@ -544,3 +544,141 @@ response.cookies.set('${cookieName}', valor, {
 
   return { resultados, logs };
 }
+
+// ============================================================
+// 5. MÓDULO: ESTRÉS (Real Scan)
+// ============================================================
+export async function ejecutarEstres(
+  url: string,
+  ejecucionId: string,
+  peticiones: number = 50,
+  duracion: number = 6,
+  isInterrupted?: () => Promise<boolean>
+): Promise<{ resultados: Partial<ResultadoTest>[]; logs: LogConsola[] }> {
+  const resultados: Partial<ResultadoTest>[] = [];
+  const logs: LogConsola[] = [];
+
+  const addLog = (nivel: LogConsola["nivel"], mensaje: string) => {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      nivel,
+      mensaje,
+      modulo: "estres",
+    });
+  };
+
+  addLog("info", `🔥 [Estrés] Iniciando simulación de carga real hacia ${url}...`);
+  addLog("info", `🔥 [Estrés] Configuración: ${peticiones} usuarios virtuales (VUs) durante ${duracion} segundos.`);
+
+  // Medir latencias
+  const latencias: number[] = [];
+  let exitosos = 0;
+  let fallidos = 0;
+  let totalRequests = 0;
+
+  const totalDurationMs = duracion * 1000;
+  const startTest = Date.now();
+  
+  // Dividimos la cantidad de peticiones en ráfagas de 1 segundo
+  const intervaloMs = 1000;
+  const peticionesPorSegundo = Math.ceil(peticiones / Math.max(1, duracion));
+
+  addLog("info", `🔥 [Estrés] Ejecutando ráfagas de ${peticionesPorSegundo} peticiones por segundo...`);
+
+  try {
+    let elapsed = 0;
+    while (elapsed < totalDurationMs) {
+      if (isInterrupted && await isInterrupted()) {
+        addLog("warn", "⚠️ [Estrés] Simulación de estrés interrumpida por el usuario.");
+        break;
+      }
+
+      const promesasBatch = Array.from({ length: peticionesPorSegundo }).map(async () => {
+        const reqStart = Date.now();
+        const check = await pingUrl(url);
+        const reqEnd = Date.now();
+        const duration = reqEnd - reqStart;
+        
+        if (check.ok) {
+          exitosos++;
+          latencias.push(duration);
+        } else {
+          fallidos++;
+        }
+        totalRequests++;
+      });
+
+      await Promise.all(promesasBatch);
+      await delay(intervaloMs);
+      elapsed = Date.now() - startTest;
+    }
+
+    const testDurationRealSec = (Date.now() - startTest) / 1000;
+    const throughput = totalRequests / Math.max(0.1, testDurationRealSec);
+    const tasaError = totalRequests > 0 ? (fallidos / totalRequests) * 100 : 0;
+
+    // Calcular P50, P95 y Promedio
+    latencias.sort((a, b) => a - b);
+    const avgLatencia = latencias.length > 0 ? latencias.reduce((sum, val) => sum + val, 0) / latencias.length : 0;
+    const p50 = latencias.length > 0 ? latencias[Math.floor(latencias.length * 0.5)] : 0;
+    const p95 = latencias.length > 0 ? latencias[Math.floor(latencias.length * 0.95)] : 0;
+
+    addLog("info", `🔥 [Estrés] Carga finalizada. Total peticiones: ${totalRequests} (${exitosos} exitosas, ${fallidos} fallidas).`);
+    addLog("info", `🔥 [Estrés] Métricas de Latencia — Promedio: ${avgLatencia.toFixed(0)}ms, P50: ${p50}ms, P95: ${p95}ms.`);
+
+    const severidad = p95 > 800 || tasaError > 5 ? "critico" : p95 > 400 || tasaError > 1 ? "advertencia" : "exito";
+
+    if (severidad === "critico" || severidad === "advertencia") {
+      addLog("warn", `🔥 [Estrés] Rendimiento degradado bajo carga (P95: ${p95}ms, Errores: ${tasaError.toFixed(1)}%).`);
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "estres",
+        nivel_severidad: severidad,
+        descripcion_error: `El servidor experimenta lentitud bajo carga. Latencia P95: ${p95.toFixed(0)}ms (umbral: 800ms) con ${tasaError.toFixed(1)}% de peticiones fallidas.`,
+        componente_afectado_html: `GET ${url}`,
+        url_afectada: url,
+        metadatos_adicionales: {
+          vus: peticiones,
+          duracion: `${duracion}s`,
+          p50: `${p50.toFixed(0)}ms`,
+          p95: `${p95.toFixed(0)}ms`,
+          requests_total: totalRequests,
+          requests_fallidos: fallidos,
+          tasa_error: `${tasaError.toFixed(1)}%`,
+          throughput: `${throughput.toFixed(1)} req/s`
+        },
+        codigo_solucion_sugerido: `// Sugerencias para optimizar el rendimiento:
+// 1. Agregar índices para las consultas SQL de base de datos más recurrentes.
+// 2. Implementar almacenamiento en caché (ej. Vercel KV / Redis / CDN caching).
+// 3. Optimizar el tamaño de las imágenes y assets para reducir el peso de descarga.`,
+        lenguaje_codigo: "javascript"
+      });
+    } else {
+      addLog("success", "🔥 [Estrés] Rendimiento óptimo bajo carga. Cero problemas detectados.");
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "estres",
+        nivel_severidad: "exito",
+        descripcion_error: `Rendimiento de carga óptimo. Latencia P95: ${p95.toFixed(0)}ms con 0% de errores bajo carga.`,
+        componente_afectado_html: `GET ${url}`,
+        url_afectada: url,
+        metadatos_adicionales: {
+          vus: peticiones,
+          duracion: `${duracion}s`,
+          p50: `${p50.toFixed(0)}ms`,
+          p95: `${p95.toFixed(0)}ms`,
+          requests_total: totalRequests,
+          requests_fallidos: fallidos,
+          tasa_error: `${tasaError.toFixed(1)}%`,
+          throughput: `${throughput.toFixed(1)} req/s`
+        }
+      });
+    }
+
+  } catch (err: any) {
+    addLog("error", `🔥 [Estrés] Error crítico en simulación de carga: ${err.message}`);
+  }
+
+  return { resultados, logs };
+}
+

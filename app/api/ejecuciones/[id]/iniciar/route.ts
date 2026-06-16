@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { generarLogs, generarResultadosMock, delay } from "@/lib/mock-engine";
-import { ejecutarLinksRotos, ejecutarAccesibilidad, ejecutarOrtografia, ejecutarSeguridad } from "@/lib/real-engine";
+import { ejecutarLinksRotos, ejecutarAccesibilidad, ejecutarOrtografia, ejecutarSeguridad, ejecutarEstres } from "@/lib/real-engine";
 import { NextRequest, NextResponse } from "next/server";
 
 // POST /api/ejecuciones/[id]/iniciar
@@ -102,7 +102,7 @@ async function ejecutarSimulacion(
         })
         .eq("id", ejecucionId);
 
-      const isRealModule = ["links_rotos", "accesibilidad", "ortografia", "seguridad"].includes(modulo);
+      const isRealModule = ["links_rotos", "accesibilidad", "ortografia", "seguridad", "estres"].includes(modulo);
 
       if (isRealModule) {
         // Ejecución Real
@@ -123,8 +123,12 @@ async function ejecutarSimulacion(
           resReal = await ejecutarAccesibilidad(url, ejecucionId, isInterruptedCb);
         } else if (modulo === "ortografia") {
           resReal = await ejecutarOrtografia(url, ejecucionId, isInterruptedCb);
-        } else {
+        } else if (modulo === "seguridad") {
           resReal = await ejecutarSeguridad(url, ejecucionId, isInterruptedCb);
+        } else {
+          const vus = initialConfig.peticiones_concurrentes || 50;
+          const secs = Math.min(7, initialConfig.duracion_segundos || 6); // Cap a 7s en Vercel Serverless
+          resReal = await ejecutarEstres(url, ejecucionId, vus, secs, isInterruptedCb);
         }
 
         // Obtener configuración más reciente para ver si fue interrumpido
@@ -355,7 +359,7 @@ async function ejecutarSimulacion(
       .eq("id", ejecucionId);
 
     // Filtrar los módulos que ya ejecutaron pruebas reales para que no se generen mocks duplicados
-    const modulosParaMock = modulosFiltrados.filter(m => !["links_rotos", "accesibilidad", "ortografia", "seguridad"].includes(m));
+    const modulosParaMock = modulosFiltrados.filter(m => !["links_rotos", "accesibilidad", "ortografia", "seguridad", "estres"].includes(m));
     const resultados = await generarResultadosMock(ejecucionId, modulosParaMock, url);
 
     if (resultados.length > 0) {
