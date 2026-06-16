@@ -121,12 +121,7 @@ export default function ConfigurarPage() {
 
       const ejecucionId = ejecJson.data.id;
 
-      // 3. Disparar simulación
-      await fetch(`/api/ejecuciones/${ejecucionId}/iniciar`, {
-        method: 'POST',
-      });
-
-      // 4. Redirigir al monitor
+      // 3. Redirigir al monitor (el monitor se encargará de iniciar la simulación)
       router.push(`/proyectos/${params.id}/monitor?ejecucion=${ejecucionId}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al lanzar la batería');

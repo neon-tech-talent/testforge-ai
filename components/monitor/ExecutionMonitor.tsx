@@ -49,6 +49,13 @@ export function ExecutionMonitor({ ejecucionId, onCompleted }: ExecutionMonitorP
   }, [fetchEjecucion]);
 
   useEffect(() => {
+    if (ejecucion && ejecucion.estado === 'pendiente') {
+      // Disparar la simulación de forma asíncrona en el cliente para mantener abierta la conexión del servidor en Vercel
+      fetch(`/api/ejecuciones/${ejecucionId}/iniciar`, { method: 'POST' }).catch(console.error);
+    }
+  }, [ejecucion, ejecucionId]);
+
+  useEffect(() => {
     const supabase = createClient();
     const channel = supabase
       .channel(`ejecucion-${ejecucionId}`)

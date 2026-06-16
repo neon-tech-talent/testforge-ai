@@ -25,13 +25,10 @@ export async function POST(
   const urlObjetivo = (ejecucion as { proyectos?: { url_sitio?: string } }).proyectos?.url_sitio || "";
   const modulos: string[] = ejecucion.modulos_activos || [];
 
-  // Responder inmediatamente al cliente
-  const responsePromise = NextResponse.json({ message: "Simulación iniciada", ejecucion_id: ejecucionId });
+  // Ejecutar simulación de forma asíncrona pero bloqueante para mantener viva la función en Vercel
+  await ejecutarSimulacion(supabase, ejecucionId, modulos, urlObjetivo);
 
-  // Ejecutar simulación en background (sin await para respuesta inmediata)
-  ejecutarSimulacion(supabase, ejecucionId, modulos, urlObjetivo).catch(console.error);
-
-  return responsePromise;
+  return NextResponse.json({ message: "Simulación completada", ejecucion_id: ejecucionId });
 }
 
 async function ejecutarSimulacion(
@@ -121,9 +118,9 @@ async function ejecutarSimulacion(
         })
         .eq("id", ejecucionId);
 
-      // Delay realista por módulo, chequeando interrupción cada 500ms
-      const delayTime = 2000 + Math.random() * 2000;
-      const step = 500;
+      // Delay realista por módulo, chequeando interrupción cada 250ms (1 a 2 segundos por módulo)
+      const delayTime = 1000 + Math.random() * 1000;
+      const step = 250;
       let elapsed = 0;
       let interrupted = false;
 
