@@ -47,6 +47,66 @@ function extraerEnlaces(html: string, baseUrl: string): string[] {
   return Array.from(enlaces);
 }
 
+// Helper: Tomar captura de pantalla real y subirla a Supabase Storage
+async function obtenerCapturaReal(
+  url: string,
+  ejecucionId: string,
+  modulo: string,
+  addLog: (nivel: LogConsola["nivel"], mensaje: string) => void,
+  fallbackUrl: string
+): Promise<string> {
+  const browserlessKey = process.env.BROWSERLESS_API_KEY;
+  if (!browserlessKey) {
+    addLog("warn", `⚠️ [${modulo}] No se encontró BROWSERLESS_API_KEY en las variables de entorno. Usando captura simulada.`);
+    return fallbackUrl;
+  }
+
+  try {
+    const puppeteer = await import("puppeteer-core");
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessKey}`,
+    });
+    
+    try {
+      const page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 800 });
+      await page.goto(url, { waitUntil: "networkidle2", timeout: 10000 });
+      const screenshotBuffer = await page.screenshot({ type: "png" });
+      
+      const supabase = createAdminClient();
+      const filePath = `ejecuciones/${ejecucionId}/${modulo}_real.png`;
+      
+      // Asegurar bucket de almacenamiento
+      try {
+        await supabase.storage.createBucket("screenshots", { public: true });
+      } catch {}
+
+      const { error: uploadError } = await supabase.storage
+        .from("screenshots")
+        .upload(filePath, screenshotBuffer, {
+          contentType: "image/png",
+          upsert: true
+        });
+
+      if (uploadError) {
+        throw new Error(uploadError.message);
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("screenshots")
+        .getPublicUrl(filePath);
+
+      addLog("success", `📸 [${modulo}] Captura de pantalla real del sitio generada y guardada.`);
+      return publicUrl;
+    } finally {
+      await browser.close();
+    }
+  } catch (err: any) {
+    addLog("warn", `⚠️ [${modulo}] No se pudo capturar pantalla real: ${err.message}. Usando captura simulada.`);
+    return fallbackUrl;
+  }
+}
+
 // ============================================================
 // 1. MÓDULO: ENLACES ROTOS (Real Scan)
 // ============================================================
@@ -118,6 +178,19 @@ export async function ejecutarLinksRotos(
     }
 
     addLog("success", `🔗 [Links] Rastreo completado. Se encontraron ${resultados.length} enlaces rotos.`);
+    
+    if (resultados.length > 0) {
+      const realScreenshot = await obtenerCapturaReal(
+        url,
+        ejecucionId,
+        "links_rotos",
+        addLog,
+        "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&w=600&q=80"
+      );
+      resultados.forEach(r => {
+        r.captura_pantalla_url = realScreenshot;
+      });
+    }
   } catch (err: any) {
     addLog("error", `🔗 [Links] Error crítico durante el análisis: ${err.message}`);
   }
@@ -242,6 +315,21 @@ export async function ejecutarAccesibilidad(
     }
 
     addLog("success", "♿ [Accesibilidad] Auditoría completada con éxito.");
+    
+    if (resultados.length > 0) {
+      const realScreenshot = await obtenerCapturaReal(
+        url,
+        ejecucionId,
+        "accesibilidad",
+        addLog,
+        "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=600&q=80"
+      );
+      resultados.forEach(r => {
+        if (!r.captura_pantalla_url || r.captura_pantalla_url.includes("unsplash.com")) {
+          r.captura_pantalla_url = realScreenshot;
+        }
+      });
+    }
   } catch (err: any) {
     addLog("error", `♿ [Accesibilidad] Error crítico: ${err.message}`);
   }
@@ -346,6 +434,19 @@ export async function ejecutarOrtografia(
     });
 
     addLog("success", `✍️ [Ortografía] Análisis completado. Se encontraron ${resultados.length} sugerencias.`);
+    
+    if (resultados.length > 0) {
+      const realScreenshot = await obtenerCapturaReal(
+        url,
+        ejecucionId,
+        "ortografia",
+        addLog,
+        "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80"
+      );
+      resultados.forEach(r => {
+        r.captura_pantalla_url = realScreenshot;
+      });
+    }
   } catch (err: any) {
     addLog("error", `✍️ [Ortografía] Error crítico en análisis: ${err.message}`);
   }
@@ -539,6 +640,19 @@ response.cookies.set('${cookieName}', valor, {
     }
 
     addLog("success", `🛡️ [Seguridad] Escaneo de seguridad completado. Se detectaron ${resultados.length} vulnerabilidades.`);
+    
+    if (resultados.length > 0) {
+      const realScreenshot = await obtenerCapturaReal(
+        url,
+        ejecucionId,
+        "seguridad",
+        addLog,
+        "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80"
+      );
+      resultados.forEach(r => {
+        r.captura_pantalla_url = realScreenshot;
+      });
+    }
   } catch (err: any) {
     addLog("error", `🛡️ [Seguridad] Error crítico en análisis: ${err.message}`);
   }
