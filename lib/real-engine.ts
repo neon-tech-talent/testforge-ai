@@ -870,7 +870,7 @@ export async function ejecutarFuncional(
         .in("tipo_doc", ["HU", "Texto", "MD"]);
 
       if (docs && docs.length > 0) {
-        huTexto = docs.map(d => d.contenido_texto_o_url).join("\n\n");
+        huTexto = docs.map((d: any) => d.contenido_texto_o_url).join("\n\n");
         addLog("info", `⚡ [Funcional] Se cargó la documentación de Historias de Usuario (${docs.length} documentos).`);
       } else {
         addLog("info", "⚡ [Funcional] No se encontró documentación de Historias de Usuario (HU).");
