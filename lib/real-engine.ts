@@ -146,27 +146,29 @@ export async function ejecutarLinksRotos(
       addLog("warn", "⚠️ [Links] Ejecución interrumpida por el usuario.");
       return { resultados, logs };
     }
-    const enlaces = extraerEnlaces(html, url).slice(0, 15); // Limitar a 15 enlaces para evitar timeouts en Serverless
-    
-    addLog("info", `🔗 [Links] Se detectaron ${enlaces.length} enlaces para auditar. Verificando estado HTTP...`);
+    const enlaces = extraerEnlaces(html, url).slice(0, 15);
+    addLog("info", `🔗 [Links] Se detectaron ${enlaces.length} enlaces para auditar. Verificando estado HTTP de forma concurrente...`);
 
-    for (const link of enlaces) {
+    const checks = await Promise.all(enlaces.map(async (link) => {
       if (isInterrupted && await isInterrupted()) {
-        addLog("warn", "⚠️ [Links] Ejecución interrumpida por el usuario.");
-        break;
+        return { link, ok: true, status: 200, skipped: true, error: undefined as string | undefined };
       }
       addLog("info", `🔗 [Links] Verificando: ${link}`);
       const check = await pingUrl(link);
-      
+      return { link, ...check, skipped: false };
+    }));
+
+    for (const check of checks) {
+      if (check.skipped) continue;
       if (!check.ok) {
-        addLog("warn", `🔗 [Links] Enlace roto encontrado: ${link} (Status: ${check.status || 'Fallo de Red'})`);
+        addLog("warn", `🔗 [Links] Enlace roto encontrado: ${check.link} (Status: ${check.status || 'Fallo de Red'})`);
         resultados.push({
           ejecucion_id: ejecucionId,
           tipo_prueba: "links_rotos",
           nivel_severidad: "critico",
-          descripcion_error: `Enlace roto detectado: Código ${check.status || 'Conexión Fallida'} para "${link}"`,
-          componente_afectado_html: `<a href="${link}">`,
-          url_afectada: link,
+          descripcion_error: `Enlace roto detectado: Código ${check.status || 'Conexión Fallida'} para "${check.link}"`,
+          componente_afectado_html: `<a href="${check.link}">`,
+          url_afectada: check.link,
           captura_pantalla_url: "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&w=600&q=80",
           metadatos_adicionales: {
             http_status: check.status,
@@ -381,6 +383,29 @@ export async function ejecutarOrtografia(
     const html = await res.text();
     const textoLimpio = extraerTextoLimpio(html);
 
+    // Detectar idioma del HTML
+    let languageCode = "es"; // Por defecto español
+    const langMatch = html.match(/<html[^>]*lang=["']([a-zA-Z]{2})(-[a-zA-Z]{2})?["']/i);
+    if (langMatch && langMatch[1]) {
+      const code = langMatch[1].toLowerCase();
+      if (code === "en") {
+        languageCode = "en-US";
+      } else if (code === "es") {
+        languageCode = "es";
+      } else {
+        languageCode = code;
+      }
+    } else {
+      // Heurística de respaldo: buscar palabras comunes en inglés
+      const palabrasIngles = ["the", "and", "phone", "number", "email", "submit", "button", "input"];
+      const htmlLower = html.toLowerCase();
+      const coincidencias = palabrasIngles.filter(p => htmlLower.includes(p)).length;
+      if (coincidencias >= 4) {
+        languageCode = "en-US";
+      }
+    }
+
+    addLog("info", `✍️ [Ortografía] Idioma detectado para análisis: "${languageCode}"`);
     addLog("info", "✍️ [Ortografía] Analizando 1500 caracteres con la API pública de LanguageTool...");
 
     const textoCortado = textoLimpio.slice(0, 1500);
@@ -391,7 +416,7 @@ export async function ejecutarOrtografia(
 
     const params = new URLSearchParams();
     params.append('text', textoCortado);
-    params.append('language', 'es');
+    params.append('language', languageCode);
 
     const checkRes = await fetch('https://api.languagetool.org/v2/check', {
       method: 'POST',
