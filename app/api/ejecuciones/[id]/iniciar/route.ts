@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { generarLogs, generarResultadosMock, delay } from "@/lib/mock-engine";
+import { ejecutarLinksRotos, ejecutarAccesibilidad, ejecutarOrtografia } from "@/lib/real-engine";
 import { NextRequest, NextResponse } from "next/server";
 
 // POST /api/ejecuciones/[id]/iniciar
@@ -101,116 +102,225 @@ async function ejecutarSimulacion(
         })
         .eq("id", ejecucionId);
 
-      // Filtrar logs de este módulo
-      const logsModulo = allLogs.filter((l) => l.modulo === modulo);
-      const logsInicio = logsModulo.slice(0, logsModulo.length - 1);
-      const logFin = logsModulo.slice(logsModulo.length - 1);
+      const isRealModule = ["links_rotos", "accesibilidad", "ortografia"].includes(modulo);
 
-      // Agregar logs iniciales del módulo a la consola
-      logsAcumulados.push(...logsInicio);
-      progresoActual = Math.min(90, progresoActual + progresoIncremento);
+      if (isRealModule) {
+        // Ejecución Real
+        const isInterruptedCb = async () => {
+          const { data: checkExec } = await supabase
+            .from("ejecuciones_test")
+            .select("configuracion_json")
+            .eq("id", ejecucionId)
+            .single();
+          const checkConfig = (checkExec?.configuracion_json || {}) as Record<string, any>;
+          return !!checkConfig.skip_requested;
+        };
 
-      await supabase
-        .from("ejecuciones_test")
-        .update({
-          progreso: progresoActual,
-          logs_consola: logsAcumulados,
-        })
-        .eq("id", ejecucionId);
+        let resReal;
+        if (modulo === "links_rotos") {
+          resReal = await ejecutarLinksRotos(url, ejecucionId, isInterruptedCb);
+        } else if (modulo === "accesibilidad") {
+          resReal = await ejecutarAccesibilidad(url, ejecucionId, isInterruptedCb);
+        } else {
+          resReal = await ejecutarOrtografia(url, ejecucionId, isInterruptedCb);
+        }
 
-      // Delay realista por módulo, chequeando interrupción cada 250ms (1 a 2 segundos por módulo)
-      const delayTime = 1000 + Math.random() * 1000;
-      const step = 250;
-      let elapsed = 0;
-      let interrupted = false;
-
-      while (elapsed < delayTime) {
-        await delay(step);
-        elapsed += step;
-
-        const { data: checkExec } = await supabase
+        // Obtener configuración más reciente para ver si fue interrumpido
+        const { data: finalExecStep } = await supabase
           .from("ejecuciones_test")
           .select("configuracion_json")
           .eq("id", ejecucionId)
           .single();
 
-        const checkConfig = (checkExec?.configuracion_json || {}) as Record<string, any>;
-        if (checkConfig.skip_requested) {
-          interrupted = true;
-          break;
-        }
-      }
+        let latestConfig = (finalExecStep?.configuracion_json || {}) as Record<string, any>;
+        const interrupted = !!latestConfig.skip_requested;
 
-      // Obtener la configuración más reciente después del delay/interrupción
-      const { data: finalExecStep } = await supabase
-        .from("ejecuciones_test")
-        .select("configuracion_json")
-        .eq("id", ejecucionId)
-        .single();
+        if (interrupted) {
+          const nowStr = new Date().toISOString();
 
-      let latestConfig = (finalExecStep?.configuracion_json || {}) as Record<string, any>;
-
-      if (interrupted) {
-        const nowStr = new Date().toISOString();
-
-        // Agregar log de interrupción
-        logsAcumulados.push({
-          timestamp: nowStr,
-          nivel: "warn",
-          mensaje: `⚠️ Módulo [${modulo.toUpperCase()}] interrumpido por el usuario.`,
-          modulo: modulo
-        });
-
-        // Limpiar el flag skip_requested
-        latestConfig = {
-          ...latestConfig,
-          skip_requested: false,
-        };
-
-        if (i === modulos.length - 1) {
+          // Agregar log de interrupción
           logsAcumulados.push({
             timestamp: nowStr,
-            nivel: "info",
-            mensaje: `🏁 Último módulo alcanzado. Finalizando ejecución...`,
+            nivel: "warn",
+            mensaje: `⚠️ Módulo [${modulo.toUpperCase()}] interrumpido por el usuario.`,
             modulo: modulo
           });
 
-          await supabase
-            .from("ejecuciones_test")
-            .update({
-              logs_consola: logsAcumulados,
-              configuracion_json: latestConfig
-            })
-            .eq("id", ejecucionId);
+          // Limpiar el flag skip_requested
+          latestConfig = {
+            ...latestConfig,
+            skip_requested: false,
+          };
 
-          break; // Salir de la iteración
+          if (i === modulos.length - 1) {
+            logsAcumulados.push({
+              timestamp: nowStr,
+              nivel: "info",
+              mensaje: `🏁 Último módulo alcanzado. Finalizando ejecución...`,
+              modulo: modulo
+            });
+
+            await supabase
+              .from("ejecuciones_test")
+              .update({
+                logs_consola: logsAcumulados,
+                configuracion_json: latestConfig
+              })
+              .eq("id", ejecucionId);
+
+            break; // Salir de la iteración
+          } else {
+            logsAcumulados.push({
+              timestamp: nowStr,
+              nivel: "info",
+              mensaje: `➡️ Saltando al siguiente módulo...`,
+              modulo: modulo
+            });
+
+            await supabase
+              .from("ejecuciones_test")
+              .update({
+                logs_consola: logsAcumulados,
+                configuracion_json: latestConfig
+              })
+              .eq("id", ejecucionId);
+
+            continue; // Saltar al siguiente módulo
+          }
         } else {
-          logsAcumulados.push({
-            timestamp: nowStr,
-            nivel: "info",
-            mensaje: `➡️ Saltando al siguiente módulo...`,
-            modulo: modulo
-          });
+          // Si no fue interrumpido, acumular logs y guardar resultados en base de datos
+          logsAcumulados.push(...resReal.logs);
+          progresoActual = Math.min(90, progresoActual + progresoIncremento);
 
           await supabase
             .from("ejecuciones_test")
             .update({
+              progreso: progresoActual,
               logs_consola: logsAcumulados,
-              configuracion_json: latestConfig
             })
             .eq("id", ejecucionId);
 
-          continue; // Saltar al siguiente módulo en el bucle
+          // Guardar resultados reales de esta prueba
+          if (resReal.resultados.length > 0) {
+            const resultadosConFecha = resReal.resultados.map(r => ({
+              ...r,
+              creado_en: new Date().toISOString()
+            }));
+            await supabase.from("resultados_test").insert(resultadosConFecha);
+          }
         }
       } else {
-        // Si no se interrumpió, completar el log final del módulo
-        logsAcumulados.push(...logFin);
+        // Filtrar logs de este módulo
+        const logsModulo = allLogs.filter((l) => l.modulo === modulo);
+        const logsInicio = logsModulo.slice(0, logsModulo.length - 1);
+        const logFin = logsModulo.slice(logsModulo.length - 1);
+
+        // Agregar logs iniciales del módulo a la consola
+        logsAcumulados.push(...logsInicio);
+        progresoActual = Math.min(90, progresoActual + progresoIncremento);
+
         await supabase
           .from("ejecuciones_test")
           .update({
+            progreso: progresoActual,
             logs_consola: logsAcumulados,
           })
           .eq("id", ejecucionId);
+
+        // Delay realista por módulo, chequeando interrupción cada 250ms (1 a 2 segundos por módulo)
+        const delayTime = 1000 + Math.random() * 1000;
+        const step = 250;
+        let elapsed = 0;
+        let interrupted = false;
+
+        while (elapsed < delayTime) {
+          await delay(step);
+          elapsed += step;
+
+          const { data: checkExec } = await supabase
+            .from("ejecuciones_test")
+            .select("configuracion_json")
+            .eq("id", ejecucionId)
+            .single();
+
+          const checkConfig = (checkExec?.configuracion_json || {}) as Record<string, any>;
+          if (checkConfig.skip_requested) {
+            interrupted = true;
+            break;
+          }
+        }
+
+        // Obtener la configuración más reciente después del delay/interrupción
+        const { data: finalExecStep } = await supabase
+          .from("ejecuciones_test")
+          .select("configuracion_json")
+          .eq("id", ejecucionId)
+          .single();
+
+        let latestConfig = (finalExecStep?.configuracion_json || {}) as Record<string, any>;
+
+        if (interrupted) {
+          const nowStr = new Date().toISOString();
+
+          // Agregar log de interrupción
+          logsAcumulados.push({
+            timestamp: nowStr,
+            nivel: "warn",
+            mensaje: `⚠️ Módulo [${modulo.toUpperCase()}] interrumpido por el usuario.`,
+            modulo: modulo
+          });
+
+          // Limpiar el flag skip_requested
+          latestConfig = {
+            ...latestConfig,
+            skip_requested: false,
+          };
+
+          if (i === modulos.length - 1) {
+            logsAcumulados.push({
+              timestamp: nowStr,
+              nivel: "info",
+              mensaje: `🏁 Último módulo alcanzado. Finalizando ejecución...`,
+              modulo: modulo
+            });
+
+            await supabase
+              .from("ejecuciones_test")
+              .update({
+                logs_consola: logsAcumulados,
+                configuracion_json: latestConfig
+              })
+              .eq("id", ejecucionId);
+
+            break; // Salir de la iteración
+          } else {
+            logsAcumulados.push({
+              timestamp: nowStr,
+              nivel: "info",
+              mensaje: `➡️ Saltando al siguiente módulo...`,
+              modulo: modulo
+            });
+
+            await supabase
+              .from("ejecuciones_test")
+              .update({
+                logs_consola: logsAcumulados,
+                configuracion_json: latestConfig
+              })
+              .eq("id", ejecucionId);
+
+            continue; // Saltar al siguiente módulo en el bucle
+          }
+        } else {
+          // Si no se interrumpió, completar el log final del módulo
+          logsAcumulados.push(...logFin);
+          await supabase
+            .from("ejecuciones_test")
+            .update({
+              logs_consola: logsAcumulados,
+            })
+            .eq("id", ejecucionId);
+        }
       }
     }
 
@@ -242,7 +352,9 @@ async function ejecutarSimulacion(
       })
       .eq("id", ejecucionId);
 
-    const resultados = await generarResultadosMock(ejecucionId, modulosFiltrados, url);
+    // Filtrar los módulos que ya ejecutaron pruebas reales para que no se generen mocks duplicados
+    const modulosParaMock = modulosFiltrados.filter(m => !["links_rotos", "accesibilidad", "ortografia"].includes(m));
+    const resultados = await generarResultadosMock(ejecucionId, modulosParaMock, url);
 
     if (resultados.length > 0) {
       await supabase.from("resultados_test").insert(resultados);
