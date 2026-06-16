@@ -1258,7 +1258,7 @@ export async function ejecutarFormulario(
         try {
           await page.waitForSelector(campo.selector, { timeout: 2000 });
           // Limpiar campo primero si es posible
-          await page.click(campo.selector, { clickCount: 3 });
+          await page.click(campo.selector, { clickCount: 3 } as any);
           await page.keyboard.press('Backspace');
           
           await page.type(campo.selector, valorAIngresar);
@@ -1276,7 +1276,7 @@ export async function ejecutarFormulario(
     
     const submitClicked = await page.evaluate(() => {
       // Buscar el botón de submit dentro del formulario
-      let btn = document.querySelector('button[type="submit"], input[type="submit"]') as HTMLElement;
+      let btn: HTMLElement | null = document.querySelector('button[type="submit"], input[type="submit"]') as HTMLElement | null;
       if (!btn) {
         // Buscar cualquier botón que contenga palabras claves de envío
         const btns = Array.from(document.querySelectorAll('button, a.btn, input[type="button"]')) as HTMLElement[];
