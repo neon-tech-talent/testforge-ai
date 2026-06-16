@@ -107,14 +107,16 @@ export function generarLogs(modulos: string[], url: string): LogConsola[] {
 // RESULTADOS MOCK POR MÓDULO
 // ============================================================
 
-function mockResultadosFuncional(): Partial<ResultadoTest>[] {
+function mockResultadosFuncional(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "funcional",
       nivel_severidad: "critico",
       descripcion_error: "El flujo de checkout no redirige correctamente tras el pago exitoso",
       componente_afectado_html: '<button id="btn-pagar" class="checkout-btn">Confirmar Pago</button>',
-      url_afectada: "/checkout/confirmar",
+      url_afectada: `${cleanUrl}/checkout/confirmar`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `// Agregar redirección tras pago exitoso en el handler
 async function handlePago(e: React.FormEvent) {
   e.preventDefault();
@@ -134,7 +136,8 @@ async function handlePago(e: React.FormEvent) {
       nivel_severidad: "advertencia",
       descripcion_error: "El formulario de registro no valida el formato del email en tiempo real",
       componente_afectado_html: '<input type="email" id="email-register" name="email" />',
-      url_afectada: "/registro",
+      url_afectada: `${cleanUrl}/registro`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `<!-- Agregar validación HTML5 y patrón de email -->
 <input 
   type="email" 
@@ -153,7 +156,8 @@ async function handlePago(e: React.FormEvent) {
       nivel_severidad: "info",
       descripcion_error: "La página de búsqueda tarda más de 3 segundos en cargar resultados",
       componente_afectado_html: '<div class="search-results-container" id="results">',
-      url_afectada: "/buscar?q=producto",
+      url_afectada: `${cleanUrl}/buscar?q=producto`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1573164713714-d72e4c0235b9?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `// Implementar debounce y loading state en el componente de búsqueda
 const [loading, setLoading] = useState(false);
 
@@ -174,13 +178,15 @@ const buscarProductos = useMemo(
   ];
 }
 
-function mockResultadosFormulario(): Partial<ResultadoTest>[] {
+function mockResultadosFormulario(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "formulario",
       nivel_severidad: "exito",
       descripcion_error: "Formulario de contacto rellenado y enviado exitosamente (3/3 registros)",
       componente_afectado_html: '<form id="contact-form" action="/api/contacto">',
+      url_afectada: `${cleanUrl}/contacto`,
       codigo_solucion_sugerido: null,
     },
     {
@@ -188,6 +194,7 @@ function mockResultadosFormulario(): Partial<ResultadoTest>[] {
       nivel_severidad: "advertencia",
       descripcion_error: "Input con id='str_7' no pudo ser mapeado automáticamente (campo ambiguo)",
       componente_afectado_html: '<input type="text" id="str_7" placeholder="Ingrese valor" />',
+      url_afectada: `${cleanUrl}/contacto`,
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Agregar atributos de semántica para facilitar el mapeo automático -->
 <input 
   type="text" 
@@ -202,13 +209,15 @@ function mockResultadosFormulario(): Partial<ResultadoTest>[] {
   ];
 }
 
-function mockResultadosEstres(): Partial<ResultadoTest>[] {
+function mockResultadosEstres(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "estres",
       nivel_severidad: "critico",
       descripcion_error: "Tiempo de respuesta P95 supera 800ms bajo 50 usuarios concurrentes",
       componente_afectado_html: "GET /api/productos",
+      url_afectada: `${cleanUrl}/api/productos`,
       metadatos_adicionales: {
         vus: 50,
         duracion: "30s",
@@ -241,6 +250,7 @@ await redis.setex(\`productos:\${categoriaId}\`, 300, JSON.stringify(data));`,
       nivel_severidad: "advertencia",
       descripcion_error: "Tasa de error del 2.4% bajo carga máxima (umbral: 1%)",
       componente_afectado_html: "POST /api/carrito/agregar",
+      url_afectada: `${cleanUrl}/api/carrito/agregar`,
       metadatos_adicionales: {
         errores_timeout: 18,
         errores_500: 12,
@@ -267,13 +277,16 @@ async function agregarAlCarrito(producto: Producto, retries = 3): Promise<void> 
   ];
 }
 
-function mockResultadosDiseno(): Partial<ResultadoTest>[] {
+function mockResultadosDiseno(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "diseno",
       nivel_severidad: "critico",
       descripcion_error: "Componente NavBar superpuesto con el hero en viewport Mobile (375px)",
       componente_afectado_html: '<nav class="navbar fixed-top" id="main-nav">',
+      url_afectada: cleanUrl,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `/* CORRECCIÓN: Agregar padding-top al hero para compensar la navbar fija */
 @media (max-width: 768px) {
   .navbar {
@@ -297,6 +310,8 @@ function mockResultadosDiseno(): Partial<ResultadoTest>[] {
       nivel_severidad: "advertencia",
       descripcion_error: "Texto del botón CTA desbordado en viewport Tablet (768px)",
       componente_afectado_html: '<button class="cta-button btn-primary">Comenzar prueba gratuita ahora</button>',
+      url_afectada: `${cleanUrl}/precios`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `/* CORRECCIÓN: Limitar el botón y truncar texto largo */
 .cta-button {
   max-width: 100%;
@@ -316,13 +331,15 @@ function mockResultadosDiseno(): Partial<ResultadoTest>[] {
   ];
 }
 
-function mockResultadosSeguridad(): Partial<ResultadoTest>[] {
+function mockResultadosSeguridad(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "seguridad",
       nivel_severidad: "critico",
       descripcion_error: "Cookie de sesión sin flag 'Secure' ni 'HttpOnly' — exposición a XSS",
       componente_afectado_html: "Set-Cookie: session_id=abc123; Path=/",
+      url_afectada: cleanUrl,
       codigo_solucion_sugerido: `// CORRECCIÓN: Configurar cookies seguras en Next.js
 // En app/api/auth/route.ts o middleware:
 
@@ -343,6 +360,7 @@ cookies().set('session_id', sessionToken, cookieOptions);`,
       nivel_severidad: "critico",
       descripcion_error: "Header 'Content-Security-Policy' ausente — riesgo de inyección de scripts",
       componente_afectado_html: "HTTP Response Headers",
+      url_afectada: cleanUrl,
       codigo_solucion_sugerido: `// CORRECCIÓN: Configurar CSP en next.config.ts
 const securityHeaders = [
   {
@@ -373,6 +391,7 @@ headers: async () => [{
       nivel_severidad: "advertencia",
       descripcion_error: "Header 'X-Frame-Options' ausente — posible vulnerabilidad Clickjacking",
       componente_afectado_html: "HTTP Response Headers",
+      url_afectada: cleanUrl,
       codigo_solucion_sugerido: `# CORRECCIÓN: Agregar en vercel.json
 {
   "headers": [
@@ -392,6 +411,7 @@ headers: async () => [{
       nivel_severidad: "info",
       descripcion_error: "HSTS (HTTP Strict Transport Security) no configurado",
       componente_afectado_html: "HTTP Response Headers",
+      url_afectada: cleanUrl,
       codigo_solucion_sugerido: `// Agregar en headers de Next.js:
 { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }`,
       lenguaje_codigo: "typescript",
@@ -399,14 +419,16 @@ headers: async () => [{
   ];
 }
 
-function mockResultadosOrtografia(): Partial<ResultadoTest>[] {
+function mockResultadosOrtografia(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "ortografia",
       nivel_severidad: "advertencia",
       descripcion_error: "'Bienvenidos a nuestro tienda' → error de concordancia de género",
       componente_afectado_html: '<h1 class="hero-title">Bienvenidos a nuestro tienda</h1>',
-      url_afectada: "/",
+      url_afectada: cleanUrl,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Concordancia de género -->
 <h1 class="hero-title">Bienvenidos a nuestra tienda</h1>`,
       lenguaje_codigo: "html",
@@ -416,6 +438,8 @@ function mockResultadosOrtografia(): Partial<ResultadoTest>[] {
       nivel_severidad: "advertencia",
       descripcion_error: "'Hacé click aqui' → 'aquí' requiere tilde ortográfica",
       componente_afectado_html: '<a href="/productos">Hacé click aqui</a>',
+      url_afectada: `${cleanUrl}/productos`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Agregar tilde -->
 <a href="/productos">Hacé click aquí</a>`,
       lenguaje_codigo: "html",
@@ -425,6 +449,7 @@ function mockResultadosOrtografia(): Partial<ResultadoTest>[] {
       nivel_severidad: "info",
       descripcion_error: "Uso inconsistente de mayúsculas en botones de la interfaz",
       componente_afectado_html: '<button>AGREGAR AL CARRITO</button> vs <button>Comprar Ahora</button>',
+      url_afectada: `${cleanUrl}/productos`,
       codigo_solucion_sugerido: `/* CORRECCIÓN: Estandarizar capitalización con CSS */
 .btn {
   text-transform: capitalize; /* Primera letra de cada palabra */
@@ -438,13 +463,16 @@ function mockResultadosOrtografia(): Partial<ResultadoTest>[] {
   ];
 }
 
-function mockResultadosAccesibilidad(): Partial<ResultadoTest>[] {
+function mockResultadosAccesibilidad(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "accesibilidad",
       nivel_severidad: "critico",
       descripcion_error: "5 imágenes sin atributo alt — lectores de pantalla no pueden describirlas",
       componente_afectado_html: '<img src="/hero-banner.jpg" class="hero-img">',
+      url_afectada: cleanUrl,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Agregar atributos alt descriptivos -->
 <!-- Para imágenes decorativas: -->
 <img src="/decorativo.jpg" alt="" role="presentation" />
@@ -468,6 +496,8 @@ function mockResultadosAccesibilidad(): Partial<ResultadoTest>[] {
       nivel_severidad: "critico",
       descripcion_error: "Ratio de contraste texto/fondo: 3.2:1 — No cumple WCAG AA (mínimo 4.5:1)",
       componente_afectado_html: '<p class="subtitle" style="color: #9ca3af; background: #ffffff">',
+      url_afectada: `${cleanUrl}/nosotros`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `/* CORRECCIÓN: Aumentar contraste del texto secundario */
 .subtitle {
   /* Antes: color: #9ca3af (contraste 3.2:1) */
@@ -485,6 +515,7 @@ function mockResultadosAccesibilidad(): Partial<ResultadoTest>[] {
       nivel_severidad: "advertencia",
       descripcion_error: "Formulario sin labels asociados a inputs — desorientador para tecnología asistiva",
       componente_afectado_html: '<input type="text" id="nombre" placeholder="Tu nombre" />',
+      url_afectada: `${cleanUrl}/contacto`,
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Asociar labels explícitamente -->
 <div class="form-group">
   <label for="nombre" class="form-label">
@@ -509,6 +540,7 @@ function mockResultadosAccesibilidad(): Partial<ResultadoTest>[] {
       nivel_severidad: "info",
       descripcion_error: "Meta description ausente — impacto negativo en SEO",
       componente_afectado_html: "<head> — No se encontró <meta name=\"description\">",
+      url_afectada: cleanUrl,
       codigo_solucion_sugerido: `// CORRECCIÓN: Agregar metadata en Next.js App Router
 // En app/layout.tsx o app/page.tsx:
 
@@ -531,17 +563,19 @@ export const metadata: Metadata = {
   ];
 }
 
-function mockResultadosLinksRotos(): Partial<ResultadoTest>[] {
+function mockResultadosLinksRotos(url: string): Partial<ResultadoTest>[] {
+  const cleanUrl = url.replace(/\/$/, "");
   return [
     {
       tipo_prueba: "links_rotos",
       nivel_severidad: "critico",
       descripcion_error: "404 Not Found: /productos/categoria-descontinuada",
       componente_afectado_html: '<a href="/productos/categoria-descontinuada">Ver categoría</a>',
-      url_afectada: "/productos/categoria-descontinuada",
+      url_afectada: `${cleanUrl}/productos`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&w=600&q=80",
       metadatos_adicionales: {
         http_status: 404,
-        encontrado_en: "/productos",
+        encontrado_en: `${cleanUrl}/productos`,
         tipo: "interno",
       },
       codigo_solucion_sugerido: `// CORRECCIÓN: Configurar redirección en next.config.ts
@@ -566,10 +600,11 @@ const nextConfig = {
       nivel_severidad: "critico",
       descripcion_error: "500 Internal Server Error: https://api.proveedor-externo.com/v1/datos",
       componente_afectado_html: '<a href="https://api.proveedor-externo.com/v1/datos">API Docs</a>',
-      url_afectada: "https://api.proveedor-externo.com/v1/datos",
+      url_afectada: `${cleanUrl}/integraciones`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&w=600&q=80",
       metadatos_adicionales: {
         http_status: 500,
-        encontrado_en: "/integraciones",
+        encontrado_en: `${cleanUrl}/integraciones`,
         tipo: "externo",
       },
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Reemplazar el enlace roto con la URL actualizada del proveedor
@@ -590,6 +625,8 @@ O agregar un aviso de que el enlace puede no estar disponible -->
       nivel_severidad: "advertencia",
       descripcion_error: "3 enlaces internos con rutas relativas incorrectas (./ruta vs /ruta)",
       componente_afectado_html: '<a href="./blog/articulo-1">Leer más</a>',
+      url_afectada: `${cleanUrl}/blog`,
+      captura_pantalla_url: "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&w=600&q=80",
       codigo_solucion_sugerido: `<!-- CORRECCIÓN: Usar rutas absolutas desde la raíz -->
 <!-- Antes (incorrecto - ruta relativa): -->
 <a href="./blog/articulo-1">Leer más</a>
@@ -617,28 +654,28 @@ export async function generarResultadosMock(
   const resultados: Partial<ResultadoTest>[] = [];
 
   if (modulos.includes("funcional")) {
-    resultados.push(...mockResultadosFuncional());
+    resultados.push(...mockResultadosFuncional(url));
   }
   if (modulos.includes("formulario")) {
-    resultados.push(...mockResultadosFormulario());
+    resultados.push(...mockResultadosFormulario(url));
   }
   if (modulos.includes("estres")) {
-    resultados.push(...mockResultadosEstres());
+    resultados.push(...mockResultadosEstres(url));
   }
   if (modulos.includes("diseno")) {
-    resultados.push(...mockResultadosDiseno());
+    resultados.push(...mockResultadosDiseno(url));
   }
   if (modulos.includes("seguridad")) {
-    resultados.push(...mockResultadosSeguridad());
+    resultados.push(...mockResultadosSeguridad(url));
   }
   if (modulos.includes("ortografia")) {
-    resultados.push(...mockResultadosOrtografia());
+    resultados.push(...mockResultadosOrtografia(url));
   }
   if (modulos.includes("accesibilidad")) {
-    resultados.push(...mockResultadosAccesibilidad());
+    resultados.push(...mockResultadosAccesibilidad(url));
   }
   if (modulos.includes("links_rotos")) {
-    resultados.push(...mockResultadosLinksRotos());
+    resultados.push(...mockResultadosLinksRotos(url));
   }
 
   return resultados.map((r) => ({
