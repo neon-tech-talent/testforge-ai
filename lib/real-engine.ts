@@ -806,4 +806,266 @@ export async function ejecutarDiseno(
   return { resultados, logs };
 }
 
+// ============================================================
+// 7. MÓDULO: PRUEBAS FUNCIONALES CON IA (Real Scan via Browserless & Gemini)
+// ============================================================
+export async function ejecutarFuncional(
+  url: string,
+  ejecucionId: string,
+  isInterrupted?: () => Promise<boolean>
+): Promise<{ resultados: Partial<ResultadoTest>[]; logs: LogConsola[] }> {
+  const resultados: Partial<ResultadoTest>[] = [];
+  const logs: LogConsola[] = [];
+
+  const addLog = (nivel: LogConsola["nivel"], mensaje: string) => {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      nivel,
+      mensaje,
+      modulo: "funcional",
+    });
+  };
+
+  const browserlessKey = process.env.BROWSERLESS_API_KEY;
+  if (!browserlessKey) {
+    addLog("warn", "⚠️ [Funcional] No se encontró BROWSERLESS_API_KEY en las variables de entorno.");
+    addLog("warn", "⚠️ [Funcional] Usando pruebas funcionales simuladas de respaldo...");
+
+    resultados.push({
+      ejecucion_id: ejecucionId,
+      tipo_prueba: "funcional",
+      nivel_severidad: "critico",
+      descripcion_error: "El flujo de checkout no redirige correctamente tras el pago exitoso [Simulado - Configura Browserless]",
+      componente_afectado_html: '<button id="btn-pagar" class="checkout-btn">Confirmar Pago</button>',
+      url_afectada: url + "/checkout/confirmar",
+      captura_pantalla_url: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&q=80",
+    });
+    return { resultados, logs };
+  }
+
+  addLog("info", "⚡ [Funcional] Conectando con el navegador en la nube para pruebas funcionales...");
+
+  try {
+    const puppeteer = await import("puppeteer-core");
+    const supabase = createAdminClient();
+
+    // 1. Obtener proyecto y buscar Historias de Usuario
+    const { data: ejec } = await supabase
+      .from("ejecuciones_test")
+      .select("proyecto_id")
+      .eq("id", ejecucionId)
+      .single();
+
+    const proyectoId = ejec?.proyecto_id;
+    let huTexto = "";
+
+    if (proyectoId) {
+      const { data: docs } = await supabase
+        .from("documentacion")
+        .select("*")
+        .eq("proyecto_id", proyectoId)
+        .in("tipo_doc", ["HU", "Texto", "MD"]);
+
+      if (docs && docs.length > 0) {
+        huTexto = docs.map(d => d.contenido_texto_o_url).join("\n\n");
+        addLog("info", `⚡ [Funcional] Se cargó la documentación de Historias de Usuario (${docs.length} documentos).`);
+      } else {
+        addLog("info", "⚡ [Funcional] No se encontró documentación de Historias de Usuario (HU).");
+      }
+    }
+
+    const browser = await puppeteer.connect({
+      browserWSEndpoint: `wss://chrome.browserless.io?token=${browserlessKey}`,
+    });
+
+    const page = await browser.newPage();
+    addLog("info", `⚡ [Funcional] Cargando URL principal: ${url}`);
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 8000 });
+
+    let plan: any[] = [];
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    if (huTexto && geminiKey) {
+      addLog("info", "⚡ [Funcional] Escaneando elementos interactivos del DOM...");
+      
+      const htmlInteractivos = await page.evaluate(() => {
+        const elements = Array.from(document.querySelectorAll('a, button, input, select, textarea'));
+        return elements.map(el => ({
+          tag: el.tagName.toLowerCase(),
+          id: el.id || undefined,
+          className: el.className || undefined,
+          name: (el as any).name || undefined,
+          text: el.textContent?.trim().slice(0, 50) || undefined,
+          placeholder: (el as any).placeholder || undefined
+        })).slice(0, 40);
+      });
+
+      addLog("info", "⚡ [Funcional] Enviando HU e interactivos a la IA de Gemini para planificar la prueba...");
+
+      const prompt = `
+Eres un QA Automation AI. Tu objetivo es diseñar un plan de pruebas funcionales para validar una Historia de Usuario (HU) en un sitio web.
+
+Sitio URL: ${url}
+Historia de Usuario: ${huTexto}
+Estructura HTML simplificada del sitio (elementos interactivos):
+${JSON.stringify(htmlInteractivos, null, 2)}
+
+Genera una secuencia de hasta 5 acciones secuenciales para probar el flujo de la HU. Las acciones deben ser simples y ejecutables en Puppeteer.
+Debes responder ÚNICAMENTE con un array de objetos JSON con el siguiente formato, sin markdown ni textos extra:
+[
+  { "action": "navigate", "url": "url_a_navegar" },
+  { "action": "click", "selector": "#id-del-boton-o-clase" },
+  { "action": "type", "selector": "input[name='email']", "value": "test@example.com" },
+  { "action": "wait", "ms": 1000 },
+  { "action": "assert", "selector": ".mensaje-exito", "text": "gracias" }
+]
+`;
+
+      const checkRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      });
+
+      if (checkRes.ok) {
+        const resJson = await checkRes.json();
+        const responseText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        try {
+          plan = JSON.parse(responseText.trim());
+          addLog("info", `⚡ [Funcional] IA planificó un flujo de ${plan.length} acciones.`);
+        } catch {
+          addLog("warn", "⚠️ [Funcional] Error al parsear plan de la IA. Usando plan determinista de respaldo.");
+        }
+      } else {
+        addLog("warn", `⚠️ [Funcional] Falló API de Gemini (${checkRes.status}). Usando plan de respaldo.`);
+      }
+    }
+
+    // Si no hay plan de la IA, generar un plan determinista de respaldo
+    if (plan.length === 0) {
+      addLog("info", "⚡ [Funcional] Generando prueba de navegación y estabilidad determinista...");
+      plan = [
+        { action: "navigate", url: url },
+        { action: "wait", ms: 2000 }
+      ];
+
+      // Intentar hacer clic en el primer enlace interno de navegación
+      const links = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('a'))
+          .map(a => a.getAttribute('href'))
+          .filter(href => href && href.startsWith('/') && href.length > 1);
+      });
+
+      if (links.length > 0) {
+        plan.push({ action: "click", selector: `a[href="${links[0]}"]` });
+        plan.push({ action: "wait", ms: 2000 });
+      }
+    }
+
+    // Asegurar bucket de almacenamiento
+    try {
+      await supabase.storage.createBucket("screenshots", { public: true });
+    } catch {}
+
+    // Ejecutar pasos secuencialmente
+    let flowSuccess = true;
+
+    for (const step of plan) {
+      if (isInterrupted && await isInterrupted()) {
+        addLog("warn", "⚠️ [Funcional] Ejecución cancelada por el usuario.");
+        flowSuccess = false;
+        break;
+      }
+
+      addLog("info", `⚡ [Funcional] Ejecutando acción: ${step.action} ${step.selector || step.url || ""}`);
+
+      try {
+        if (step.action === "navigate") {
+          await page.goto(step.url, { waitUntil: "networkidle2", timeout: 8000 });
+        } else if (step.action === "click" && step.selector) {
+          await page.waitForSelector(step.selector, { timeout: 4000 });
+          await page.click(step.selector);
+        } else if (step.action === "type" && step.selector && step.value) {
+          await page.waitForSelector(step.selector, { timeout: 4000 });
+          await page.type(step.selector, step.value);
+        } else if (step.action === "wait") {
+          await delay(step.ms || 1000);
+        } else if (step.action === "assert") {
+          if (step.selector) {
+            await page.waitForSelector(step.selector, { timeout: 4000 });
+          }
+          if (step.text) {
+            const pageText = await page.evaluate(() => document.body.innerText);
+            if (!pageText.toLowerCase().includes(step.text.toLowerCase())) {
+              throw new Error(`No se encontró el texto esperado "${step.text}"`);
+            }
+          }
+        }
+      } catch (actionErr: any) {
+        addLog("error", `❌ [Funcional] Fallo en acción: ${actionErr.message}`);
+        flowSuccess = false;
+
+        const screenshotBuffer = await page.screenshot({ type: "png" });
+        const filePath = `ejecuciones/${ejecucionId}/funcional_error.png`;
+
+        let screenshotUrl = "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=600&q=80";
+        try {
+          const { error: uploadError } = await supabase.storage
+            .from("screenshots")
+            .upload(filePath, screenshotBuffer, {
+              contentType: "image/png",
+              upsert: true
+            });
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage.from("screenshots").getPublicUrl(filePath);
+            screenshotUrl = publicUrl;
+          }
+        } catch {}
+
+        resultados.push({
+          ejecucion_id: ejecucionId,
+          tipo_prueba: "funcional",
+          nivel_severidad: "critico",
+          descripcion_error: `Error de flujo funcional: La acción de tipo "${step.action}" falló. Detalle: ${actionErr.message}`,
+          componente_afectado_html: step.selector || "body",
+          url_afectada: page.url(),
+          captura_pantalla_url: screenshotUrl,
+        });
+
+        break;
+      }
+    }
+
+    await browser.close();
+
+    if (flowSuccess) {
+      addLog("success", "✅ [Funcional] Flujo de pruebas completado con éxito.");
+      resultados.push({
+        ejecucion_id: ejecucionId,
+        tipo_prueba: "funcional",
+        nivel_severidad: "exito",
+        descripcion_error: "Prueba funcional completada correctamente sin fallas detectadas.",
+        url_afectada: url,
+      });
+    }
+
+  } catch (err: any) {
+    addLog("error", `⚡ [Funcional] Error crítico en análisis: ${err.message}`);
+  }
+
+  return { resultados, logs };
+}
+
+
 
