@@ -189,8 +189,12 @@ export async function ejecutarLinksRotos(
         addLog,
         "https://images.unsplash.com/photo-1594322436404-5a0526db4d13?auto=format&fit=crop&w=600&q=80"
       );
-      resultados.forEach(r => {
-        r.captura_pantalla_url = realScreenshot;
+      resultados.forEach((r, idx) => {
+        if (idx === 0) {
+          r.captura_pantalla_url = realScreenshot;
+        } else {
+          r.captura_pantalla_url = undefined;
+        }
       });
     }
   } catch (err: any) {
@@ -326,9 +330,11 @@ export async function ejecutarAccesibilidad(
         addLog,
         "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=600&q=80"
       );
-      resultados.forEach(r => {
-        if (!r.captura_pantalla_url || r.captura_pantalla_url.includes("unsplash.com")) {
+      resultados.forEach((r, idx) => {
+        if (idx === 0) {
           r.captura_pantalla_url = realScreenshot;
+        } else {
+          r.captura_pantalla_url = undefined;
         }
       });
     }
@@ -468,8 +474,12 @@ export async function ejecutarOrtografia(
         addLog,
         "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=600&q=80"
       );
-      resultados.forEach(r => {
-        r.captura_pantalla_url = realScreenshot;
+      resultados.forEach((r, idx) => {
+        if (idx === 0) {
+          r.captura_pantalla_url = realScreenshot;
+        } else {
+          r.captura_pantalla_url = undefined;
+        }
       });
     }
   } catch (err: any) {
@@ -674,8 +684,12 @@ response.cookies.set('${cookieName}', valor, {
         addLog,
         "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80"
       );
-      resultados.forEach(r => {
-        r.captura_pantalla_url = realScreenshot;
+      resultados.forEach((r, idx) => {
+        if (idx === 0) {
+          r.captura_pantalla_url = realScreenshot;
+        } else {
+          r.captura_pantalla_url = undefined;
+        }
       });
     }
   } catch (err: any) {
