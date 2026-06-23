@@ -120,6 +120,24 @@ CREATE INDEX IF NOT EXISTS idx_resultados_tipo ON public.resultados_test(tipo_pr
 CREATE INDEX IF NOT EXISTS idx_resultados_severidad ON public.resultados_test(nivel_severidad);
 
 -- ============================================================
+-- TABLA: casos_prueba
+-- ============================================================
+CREATE TABLE IF NOT EXISTS public.casos_prueba (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  proyecto_id   UUID NOT NULL REFERENCES public.proyectos(id) ON DELETE CASCADE,
+  titulo        TEXT NOT NULL,
+  descripcion   TEXT,
+  precondiciones TEXT,
+  datos         TEXT,
+  pasos         JSONB NOT NULL DEFAULT '[]', -- Array de {paso: string, resultado_esperado: string}
+  criticidad    TEXT CHECK (criticidad IN ('alta', 'media', 'baja')),
+  importancia   TEXT CHECK (importancia IN ('alta', 'media', 'baja')),
+  creado_en     TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_casos_prueba_proyecto ON public.casos_prueba(proyecto_id);
+
+-- ============================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================
 -- Habilitamos RLS en todas las tablas
@@ -128,6 +146,7 @@ ALTER TABLE public.documentacion ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.datos_formulario ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ejecuciones_test ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.resultados_test ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.casos_prueba ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- POLÍTICAS RLS - Sin autenticación (acceso anónimo por session_id)
@@ -156,6 +175,11 @@ CREATE POLICY "ejecuciones_acceso_publico"
 
 CREATE POLICY "resultados_acceso_publico"
   ON public.resultados_test FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY "casos_prueba_acceso_publico"
+  ON public.casos_prueba FOR ALL
   USING (true)
   WITH CHECK (true);
 

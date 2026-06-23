@@ -86,6 +86,24 @@ export interface ResultadoTest {
   creado_en: string;
 }
 
+export interface CasoPruebaPaso {
+  paso: string;
+  resultado_esperado: string;
+}
+
+export interface CasoPrueba {
+  id: string;
+  proyecto_id: string;
+  titulo: string;
+  descripcion: string;
+  precondiciones?: string | null;
+  datos?: string | null;
+  pasos: CasoPruebaPaso[];
+  criticidad: 'alta' | 'media' | 'baja';
+  importancia: 'alta' | 'media' | 'baja';
+  creado_en: string;
+}
+
 // ============================================================
 // CONFIGURACIÓN DE EJECUCIÓN
 // ============================================================

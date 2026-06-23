@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { Button } from '@/components/ui/Button';
-import { Settings, Activity, BarChart2, Zap } from 'lucide-react';
+import { Settings, Activity, BarChart2, Zap, ClipboardList } from 'lucide-react';
 import { useState } from 'react';
 import { Proyecto, EjecucionTest } from '@/lib/types';
 
@@ -72,7 +72,7 @@ export default function ProyectoPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-4 gap-4 mb-8">
           <Link href={`/proyectos/${params.id}/configurar`} className="forge-card p-6 hover:forge-card-active transition-all group flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
               <Settings className="w-5 h-5 text-neon-cyan" />
@@ -80,6 +80,15 @@ export default function ProyectoPage() {
             <div>
               <p className="text-white font-semibold text-sm">Configurar</p>
               <p className="text-xs text-gray-500">Módulos y parámetros</p>
+            </div>
+          </Link>
+          <Link href={`/proyectos/${params.id}/casos`} className="forge-card p-6 hover:forge-card-active transition-all group flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
+              <ClipboardList className="w-5 h-5 text-neon-cyan" />
+            </div>
+            <div>
+              <p className="text-white font-semibold text-sm">Casos de Prueba</p>
+              <p className="text-xs text-gray-500">Generados por IA (.xls)</p>
             </div>
           </Link>
           <Link href={ejecuciones[0] ? `/proyectos/${params.id}/monitor?ejecucion=${ejecuciones[0].id}` : '#'} className="forge-card p-6 hover:forge-card-active transition-all group flex items-center gap-4">
