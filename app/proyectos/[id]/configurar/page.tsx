@@ -99,8 +99,17 @@ export default function ConfigurarPage() {
         });
 
         if (!docRes.ok) {
-          const docJson = await docRes.json();
-          throw new Error(docJson.error || `Error al subir el documento: ${doc.nombre}`);
+          let errMsg = `Error al subir el documento: ${doc.nombre}`;
+          try {
+            const contentType = docRes.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const docJson = await docRes.json();
+              errMsg = docJson.error || errMsg;
+            } else {
+              errMsg = `Error del servidor (${docRes.status}) al subir la documentación.`;
+            }
+          } catch {}
+          throw new Error(errMsg);
         }
       }
 
@@ -121,8 +130,17 @@ export default function ConfigurarPage() {
         }),
       });
 
-      const ejecJson = await ejecRes.json();
-      if (!ejecRes.ok) throw new Error(ejecJson.error || 'Error al crear ejecución');
+      let ejecJson: any;
+      const contentType = ejecRes.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        ejecJson = await ejecRes.json();
+      } else {
+        throw new Error(`Error del servidor (${ejecRes.status}) al crear la ejecución.`);
+      }
+
+      if (!ejecRes.ok) {
+        throw new Error(ejecJson?.error || 'Error al crear ejecución');
+      }
 
       const ejecucionId = ejecJson.data.id;
 
