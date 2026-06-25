@@ -25,7 +25,11 @@ export function DocumentDropzone({ onDocumentAdded, documentos, onDocumentRemove
           const tipo = file.name.endsWith('.pdf') ? 'PDF' : file.name.endsWith('.md') ? 'MD' : 'Texto';
           onDocumentAdded(content, tipo, file.name);
         };
-        reader.readAsText(file);
+        if (file.name.endsWith('.pdf')) {
+          reader.readAsDataURL(file);
+        } else {
+          reader.readAsText(file);
+        }
       });
     },
     [onDocumentAdded]
@@ -40,7 +44,11 @@ export function DocumentDropzone({ onDocumentAdded, documentos, onDocumentRemove
         const tipo = file.name.endsWith('.pdf') ? 'PDF' : file.name.endsWith('.md') ? 'MD' : 'HU';
         onDocumentAdded(content, tipo, file.name);
       };
-      reader.readAsText(file);
+      if (file.name.endsWith('.pdf')) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.readAsText(file);
+      }
     });
   };
 

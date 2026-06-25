@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { generarLogs, generarResultadosMock, delay } from "@/lib/mock-engine";
 import { ejecutarLinksRotos, ejecutarAccesibilidad, ejecutarOrtografia, ejecutarSeguridad, ejecutarEstres, ejecutarDiseno, ejecutarFuncional, ejecutarFormulario } from "@/lib/real-engine";
 import { NextRequest, NextResponse } from "next/server";
+import { generarYGuardarCasosDePrueba } from "@/lib/casos-helper";
 
 // POST /api/ejecuciones/[id]/iniciar
 // Dispara la simulación completa de la batería de tests
@@ -27,7 +28,7 @@ export async function POST(
   const modulos: string[] = ejecucion.modulos_activos || [];
 
   // Ejecutar simulación de forma asíncrona pero bloqueante para mantener viva la función en Vercel
-  await ejecutarSimulacion(supabase, ejecucionId, modulos, urlObjetivo);
+  await ejecutarSimulacion(supabase, ejecucionId, modulos, urlObjetivo, ejecucion.proyecto_id);
 
   return NextResponse.json({ message: "Simulación completada", ejecucion_id: ejecucionId });
 }
@@ -36,7 +37,8 @@ async function ejecutarSimulacion(
   supabase: ReturnType<typeof createAdminClient>,
   ejecucionId: string,
   modulos: string[],
-  url: string
+  url: string,
+  proyectoId: string
 ) {
   try {
     // 1. Obtener configuración inicial
@@ -370,6 +372,13 @@ async function ejecutarSimulacion(
 
     if (resultados.length > 0) {
       await supabase.from("resultados_test").insert(resultados);
+    }
+
+    // Generar casos de prueba automáticamente al finalizar
+    try {
+      await generarYGuardarCasosDePrueba(proyectoId);
+    } catch (casosErr) {
+      console.error("Error al generar casos de prueba automáticamente:", casosErr);
     }
 
     // 5. Marcar como completado

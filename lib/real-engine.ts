@@ -1020,7 +1020,7 @@ export async function ejecutarFuncional(
         .from("documentacion")
         .select("*")
         .eq("proyecto_id", proyectoId)
-        .in("tipo_doc", ["HU", "Texto", "MD"]);
+        .in("tipo_doc", ["HU", "Texto", "MD", "PDF"]);
 
       if (docs && docs.length > 0) {
         huTexto = docs.map((d: any) => d.contenido_texto_o_url).join("\n\n");

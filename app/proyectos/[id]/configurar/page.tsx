@@ -87,7 +87,7 @@ export default function ConfigurarPage() {
     try {
       // 1. Subir documentos si los hay
       for (const doc of documentos) {
-        await fetch('/api/documentacion', {
+        const docRes = await fetch('/api/documentacion', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -97,6 +97,11 @@ export default function ConfigurarPage() {
             contenido_texto_o_url: doc.contenido,
           }),
         });
+
+        if (!docRes.ok) {
+          const docJson = await docRes.json();
+          throw new Error(docJson.error || `Error al subir el documento: ${doc.nombre}`);
+        }
       }
 
       // 2. Crear ejecución

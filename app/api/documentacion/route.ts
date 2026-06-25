@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdf = require("pdf-parse");
 
 // GET /api/documentacion?proyecto_id=xxx
 export async function GET(request: NextRequest) {
@@ -51,13 +53,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Extraer texto real si el documento es un PDF codificado en base64
+  let textoFinal = contenido_texto_o_url;
+  if (tipo_doc === "PDF" && contenido_texto_o_url.startsWith("data:application/pdf;base64,")) {
+    try {
+      const base64Data = contenido_texto_o_url.split(",")[1];
+      const buffer = Buffer.from(base64Data, "base64");
+      const pdfData = await pdf(buffer);
+      textoFinal = pdfData.text || "";
+    } catch (parseErr: any) {
+      console.error("Error al parsear PDF:", parseErr);
+      return NextResponse.json(
+        { error: `No se pudo extraer el texto del PDF: ${parseErr.message}` },
+        { status: 400 }
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("documentacion")
     .insert({
       proyecto_id,
       tipo_doc,
       nombre_archivo,
-      contenido_texto_o_url,
+      contenido_texto_o_url: textoFinal,
       tamanio_bytes,
     })
     .select()
