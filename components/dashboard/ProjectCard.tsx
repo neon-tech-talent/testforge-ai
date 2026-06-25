@@ -48,10 +48,10 @@ export function ProjectCard({ proyecto }: ProjectCardProps) {
           {fechaCreacion}
         </div>
         <Link
-          href={`/proyectos/${proyecto.id}/configurar`}
+          href={`/proyectos/${proyecto.id}`}
           className="flex items-center gap-1 text-xs text-neon-cyan font-semibold group-hover:gap-2 transition-all"
         >
-          Configurar
+          Ver Proyecto
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
