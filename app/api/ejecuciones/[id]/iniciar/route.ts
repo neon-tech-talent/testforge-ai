@@ -375,10 +375,33 @@ async function ejecutarSimulacion(
     }
 
     // Generar casos de prueba automáticamente al finalizar
+    const casosLogs: any[] = [];
+    const tStart = new Date().toISOString();
+    casosLogs.push({
+      timestamp: tStart,
+      nivel: "info",
+      mensaje: "📋 [Casos de Prueba] Iniciando generación automática de casos de prueba...",
+      modulo: "casos_prueba"
+    });
+
     try {
-      await generarYGuardarCasosDePrueba(proyectoId);
-    } catch (casosErr) {
+      const casos = await generarYGuardarCasosDePrueba(proyectoId);
+      const tEnd = new Date().toISOString();
+      casosLogs.push({
+        timestamp: tEnd,
+        nivel: "success",
+        mensaje: `✅ [Casos de Prueba] Se generaron y guardaron ${casos.length} casos de prueba con éxito.`,
+        modulo: "casos_prueba"
+      });
+    } catch (casosErr: any) {
       console.error("Error al generar casos de prueba automáticamente:", casosErr);
+      const tErr = new Date().toISOString();
+      casosLogs.push({
+        timestamp: tErr,
+        nivel: "error",
+        mensaje: `❌ [Casos de Prueba] Error al generar casos de prueba: ${casosErr.message || casosErr}`,
+        modulo: "casos_prueba"
+      });
     }
 
     // 5. Marcar como completado
@@ -388,7 +411,7 @@ async function ejecutarSimulacion(
         estado: "completado",
         progreso: 100,
         finalizado_en: new Date().toISOString(),
-        logs_consola: [...logsAcumulados, ...endLogs],
+        logs_consola: [...logsAcumulados, ...casosLogs, ...endLogs],
       })
       .eq("id", ejecucionId);
   } catch (error) {

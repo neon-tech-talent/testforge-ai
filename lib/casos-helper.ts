@@ -119,16 +119,47 @@ ESTRUCTURA DE RESPUESTA REQUERIDA (Ejemplo JSON):
     .delete()
     .eq("proyecto_id", proyectoId);
 
+  // Normalización de prioridades para evitar errores en las restricciones CHECK de la DB
+  const normalizePriority = (val: any): "alta" | "media" | "baja" => {
+    if (typeof val !== "string") return "media";
+    const clean = val.trim().toLowerCase();
+    if (clean === "alta" || clean === "high" || clean === "critical") return "alta";
+    if (clean === "baja" || clean === "low") return "baja";
+    return "media";
+  };
+
+  // Normalización de los pasos para asegurar que sea un array JSON de objetos válido
+  const normalizePasos = (pasos: any): any[] => {
+    if (Array.isArray(pasos)) {
+      return pasos.map((p, idx) => {
+        if (typeof p === "string") {
+          return { paso: p, resultado_esperado: "Verificar comportamiento esperado." };
+        }
+        if (p && typeof p === "object") {
+          return {
+            paso: p.paso || p.descripcion || `Paso ${idx + 1}`,
+            resultado_esperado: p.resultado_esperado || p.resultado || "Comportamiento esperado."
+          };
+        }
+        return { paso: String(p), resultado_esperado: "Comportamiento esperado." };
+      });
+    }
+    if (typeof pasos === "string" && pasos.trim()) {
+      return [{ paso: pasos, resultado_esperado: "Verificar comportamiento esperado." }];
+    }
+    return [];
+  };
+
   // Insertar nuevos
   const casosInsertar = casosGenerados.map((caso) => ({
     proyecto_id: proyectoId,
-    titulo: caso.titulo,
-    descripcion: caso.descripcion,
-    precondiciones: caso.precondiciones,
-    datos: caso.datos,
-    pasos: caso.pasos,
-    criticidad: caso.criticidad || "media",
-    importancia: caso.importancia || "media",
+    titulo: caso.titulo || "cp_caso_001: Caso de prueba sin título",
+    descripcion: caso.descripcion || caso.detalle || "",
+    precondiciones: caso.precondiciones || "",
+    datos: caso.datos || caso.data || "",
+    pasos: normalizePasos(caso.pasos || caso.paso_a_paso),
+    criticidad: normalizePriority(caso.criticidad),
+    importancia: normalizePriority(caso.importancia),
   }));
 
   const { data: casosGuardados, error: insertError } = await supabase
