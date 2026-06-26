@@ -1,7 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdf = require("pdf-parse");
 
 // GET /api/documentacion?proyecto_id=xxx
 export async function GET(request: NextRequest) {
@@ -62,6 +60,7 @@ export async function POST(request: NextRequest) {
     let textoFinal = contenido_texto_o_url;
     if (tipo_doc === "PDF" && contenido_texto_o_url.startsWith("data:application/pdf;base64,")) {
       try {
+        const pdf = require("pdf-parse");
         const base64Data = contenido_texto_o_url.split(",")[1];
         const buffer = Buffer.from(base64Data, "base64");
         const pdfData = await pdf(buffer);
