@@ -22,10 +22,11 @@ export function DocumentDropzone({ onDocumentAdded, documentos, onDocumentRemove
         const reader = new FileReader();
         reader.onload = (ev) => {
           const content = ev.target?.result as string;
-          const tipo = file.name.endsWith('.pdf') ? 'PDF' : file.name.endsWith('.md') ? 'MD' : 'Texto';
+          const fileNameLower = file.name.toLowerCase();
+          const tipo = fileNameLower.endsWith('.pdf') ? 'PDF' : fileNameLower.endsWith('.md') ? 'MD' : 'Texto';
           onDocumentAdded(content, tipo, file.name);
         };
-        if (file.name.endsWith('.pdf')) {
+        if (file.name.toLowerCase().endsWith('.pdf')) {
           reader.readAsDataURL(file);
         } else {
           reader.readAsText(file);
@@ -41,10 +42,11 @@ export function DocumentDropzone({ onDocumentAdded, documentos, onDocumentRemove
       const reader = new FileReader();
       reader.onload = (ev) => {
         const content = ev.target?.result as string;
-        const tipo = file.name.endsWith('.pdf') ? 'PDF' : file.name.endsWith('.md') ? 'MD' : 'HU';
+        const fileNameLower = file.name.toLowerCase();
+        const tipo = fileNameLower.endsWith('.pdf') ? 'PDF' : fileNameLower.endsWith('.md') ? 'MD' : 'HU';
         onDocumentAdded(content, tipo, file.name);
       };
-      if (file.name.endsWith('.pdf')) {
+      if (file.name.toLowerCase().endsWith('.pdf')) {
         reader.readAsDataURL(file);
       } else {
         reader.readAsText(file);
@@ -76,6 +78,9 @@ export function DocumentDropzone({ onDocumentAdded, documentos, onDocumentRemove
           accept=".pdf,.md,.txt"
           className="hidden"
           onChange={handleFileInput}
+          onClick={(e) => {
+            (e.target as HTMLInputElement).value = '';
+          }}
         />
         <Upload className="w-8 h-8 text-neon-cyan/40 mx-auto mb-2" />
         <p className="text-sm text-gray-400">Arrastra Historias de Usuario, Markdown o PDFs aquí</p>
